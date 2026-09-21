@@ -1,0 +1,25 @@
+{
+  "name": "Pointages GCC multi-chantiers",
+  "short_name": "Pointages GCC",
+  "description": "Pointages chantier GCC : heures, équipes, contrats intérim, fiches de liaison, rappels et exports",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f5f5f3",
+  "theme_color": "#ffd800",
+  "lang": "fr",
+  "icons": [
+    {
+      "src": "assets/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "assets/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

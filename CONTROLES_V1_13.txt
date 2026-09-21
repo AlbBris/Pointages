@@ -1,0 +1,16 @@
+POINTAGES GCC V1.13 — CONTROLES
+
+- Navigation principale : Pointage / Tâches / Équipe / Intérim / Plus.
+- Synthèse semaine déplacée dans Plus.
+- Export léger Saisie iBAT : 2 feuilles (Saisie iBAT + Détail iBAT).
+- Le classeur complet inclut aussi ces 2 feuilles.
+- Partage mobile via Web Share API quand disponible.
+- Fallback : téléchargement de l'Excel + préparation d'un e-mail.
+- E-mail secrétaire configurable dans les paramètres chantier.
+- Données V1.11 conservées : même clé de stockage locale.
+- Syntaxe JS vérifiée avec Node.
+- Fichier XLSX de test ouvert et contrôlé sans erreur de formule.
+
+- Export iBAT : une ligne par personne et par tâche, heures ventilées sur les 5 jours.
+- Ligne total par personne avec absences / retards.
+- Détail iBAT : une ligne par personne / jour / tâche.
