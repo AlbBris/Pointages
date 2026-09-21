@@ -1,0 +1,9 @@
+POINTAGES GCC V1.14 — CONTROLES
+
+- Ajout type Prêt de Main d’œuvre dans la fiche personne.
+- Le type Prêt de MO possède son propre horaire par défaut.
+- Les contrôles de contrat ne s’appliquent qu’aux intérimaires.
+- Export iBAT : structure conforme au fichier S38 fourni.
+- Ligne blanche entre chaque personne.
+- Codes ventilation : S = GCC, I = Intérim, P = Prêt de MO.
+- Export complet : feuille Pointages Prêt MO créée lorsqu’au moins une personne de ce type est présente.
