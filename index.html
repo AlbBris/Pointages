@@ -1,0 +1,848 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#ffd800">
+  <meta name="description" content="Application locale de pointage, suivi intérim et ventilation des heures chantier GCC.">
+  <title>Pointages GCC</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <section id="project-home" class="project-home" aria-labelledby="project-home-title">
+    <header class="home-header">
+      <div class="home-brand">
+        <img src="assets/logo-pointages-app.png" alt="Pointages GCC" class="home-logo">
+        <div>
+          <strong>Pointages GCC</strong>
+          <span>Ventilation des heures chantier</span>
+        </div>
+      </div>
+      <button type="button" class="button primary" id="create-project-home">+ Nouveau chantier</button>
+    </header>
+
+    <main class="home-main">
+      <div class="home-intro">
+        <span class="eyebrow">Accueil</span>
+        <h1 id="project-home-title">Choisissez votre chantier</h1>
+        <p>Chaque chantier possède son propre personnel, ses tâches, ses semaines et ses pointages.</p>
+      </div>
+      <div id="project-home-stats" class="home-stats"></div>
+      <div id="project-list" class="project-card-grid"></div>
+    </main>
+  </section>
+
+  <div id="app" class="app-shell" hidden>
+    <header class="topbar">
+      <div class="brand-block">
+        <img src="assets/logo-pointages-app.png" alt="Pointages GCC" class="brand-logo">
+        <div class="brand-title">
+          <strong>Pointages</strong>
+          <span>Ventilation chantier</span>
+        </div>
+      </div>
+
+      <button class="project-block" id="back-to-projects" type="button" title="Changer de chantier">
+        <div>
+          <span class="eyebrow">Chantier · changer</span>
+          <strong id="header-project-name">Nouveau chantier</strong>
+          <small id="header-project-code"></small>
+        </div>
+        <span class="project-switch-icon" aria-hidden="true">⌂</span>
+      </button>
+
+      <div class="week-switcher" aria-label="Navigation entre les semaines">
+        <button class="icon-button" id="previous-week" type="button" aria-label="Semaine précédente">‹</button>
+        <button class="week-button" id="open-week-picker" type="button">
+          <span class="eyebrow">Semaine</span>
+          <strong id="header-week">S32 · 2026</strong>
+          <small id="header-week-dates">3–7 août</small>
+        </button>
+        <button class="icon-button" id="next-week" type="button" aria-label="Semaine suivante">›</button>
+      </div>
+
+      <div class="save-indicator" id="save-indicator" aria-live="polite">
+        <span class="save-dot"></span>
+        <span>Sauvegardé</span>
+      </div>
+    </header>
+
+    <aside class="sidebar" aria-label="Navigation principale">
+      <nav class="main-nav">
+        <button class="nav-item active" data-view="pointage" type="button">
+          <span class="nav-icon">◷</span><span>Pointage</span>
+        </button>
+        <button class="nav-item" data-view="taches" type="button">
+          <span class="nav-icon">✓</span><span>Tâches</span>
+        </button>
+        <button class="nav-item" data-view="personnel" type="button">
+          <span class="nav-icon">♟</span><span>Équipe</span>
+        </button>
+        <button class="nav-item" data-view="contrats" type="button">
+          <span class="nav-icon">⌁</span><span>Intérim</span>
+        </button>
+        <button class="nav-item" data-view="outils" type="button">
+          <span class="nav-icon">•••</span><span>Plus</span>
+        </button>
+      </nav>
+      <div class="sidebar-footer">
+        <span>V1.14.4</span>
+        <small>Mode local · prêt pour connexion</small>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <section id="view-pointage" class="view active" aria-labelledby="pointage-title">
+        <div class="view-heading">
+          <div>
+            <span class="eyebrow">Saisie quotidienne</span>
+            <h1 id="pointage-title">Pointage du jour</h1>
+            <p>Affectez les heures aux tâches sans parcourir le grand tableau Excel.</p>
+          </div>
+          <div class="heading-actions pointage-actions-simple">
+            <button type="button" class="button secondary" id="manage-week-roster">Présents</button>
+            <button type="button" class="button primary" id="add-person-from-pointage">+ Personne</button>
+            <details class="quick-actions-menu">
+              <summary class="button ghost">Plus d’actions</summary>
+              <div class="quick-actions-popover">
+                <button type="button" class="button ghost" id="copy-day">Copier un jour</button>
+                <button type="button" class="button ghost" id="toggle-selection">Sélection multiple</button>
+              </div>
+            </details>
+          </div>
+        </div>
+
+        <div id="week-lock-banner" class="week-lock-banner" hidden></div>
+        <div id="day-tabs" class="day-tabs" role="tablist" aria-label="Jours de la semaine"></div>
+        <div id="mobile-pointage-summary" class="mobile-pointage-summary" aria-live="polite"></div>
+        <div id="daily-stats" class="stats-grid"></div>
+
+        <div class="toolbar panel compact">
+          <label class="search-field">
+            <span class="sr-only">Rechercher une personne</span>
+            <span aria-hidden="true">⌕</span>
+            <input id="people-search" type="search" placeholder="Rechercher un nom, une agence ou une zone de déplacement">
+          </label>
+          <div class="segmented-control" id="type-filter" aria-label="Filtrer le personnel">
+            <button type="button" class="active" data-filter="all">Tous</button>
+            <button type="button" data-filter="GCC">GCC</button>
+            <button type="button" data-filter="Intérim">Intérim</button>
+            <button type="button" data-filter="Prêt de MO">Prêt MO</button>
+          </div>
+          <label class="compact-select">Équipe
+            <select id="team-filter"><option value="all">Toutes les équipes</option></select>
+          </label>
+          <button type="button" class="button ghost small" id="select-filtered-team" hidden>Sélectionner l’équipe</button>
+        </div>
+
+        <div id="empty-week-banner" class="empty-week-banner" hidden>
+          <div>
+            <strong>Cette semaine est encore vide.</strong>
+            <span>Ajoutez le personnel et les tâches, puis commencez le pointage.</span>
+          </div>
+        </div>
+
+        <div id="people-grid" class="people-grid"></div>
+
+        <div id="bulk-bar" class="bulk-bar" hidden>
+          <strong><span id="bulk-count">0</span> personne(s) sélectionnée(s)</strong>
+          <div>
+            <button type="button" class="button ghost" id="clear-selection">Annuler</button>
+            <button type="button" class="button primary" id="open-bulk-dialog">Affecter une tâche</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="view-semaine" class="view" aria-labelledby="week-title">
+        <div class="view-heading print-heading">
+          <div>
+            <span class="eyebrow">Contrôle hebdomadaire</span>
+            <h1 id="week-title">Synthèse de la semaine</h1>
+            <p>Les cellules sont cliquables pour corriger directement un pointage.</p>
+          </div>
+          <div class="heading-actions no-print">
+            <button type="button" class="button ghost" id="copy-previous-week">Copier S-1</button>
+            <button type="button" class="button secondary" id="toggle-week-lock">Valider et verrouiller</button>
+            <button type="button" class="button secondary" id="print-week">Imprimer / PDF</button>
+            <button type="button" class="button primary" id="export-excel-week">Exporter Excel</button>
+            <button type="button" class="button secondary" id="share-ibat-week">Partager iBAT</button>
+          </div>
+        </div>
+
+        <div id="week-status-panel" class="week-status-panel"></div>
+        <div id="week-stats" class="stats-grid"></div>
+        <div class="panel table-panel">
+          <div class="table-scroll">
+            <table class="week-table">
+              <thead id="week-table-head"></thead>
+              <tbody id="week-table-body"></tbody>
+              <tfoot id="week-table-foot"></tfoot>
+            </table>
+          </div>
+        </div>
+
+        <div class="week-bottom-grid">
+          <div class="panel">
+            <div class="panel-title-row">
+              <div>
+                <span class="eyebrow">Répartition</span>
+                <h2>Heures par tâche</h2>
+              </div>
+            </div>
+            <div id="task-summary" class="task-summary"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-title-row">
+              <div>
+                <span class="eyebrow">Anomalies</span>
+                <h2>Points à vérifier</h2>
+              </div>
+            </div>
+            <div id="alerts-list" class="alerts-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="view-personnel" class="view" aria-labelledby="personnel-title">
+        <div class="view-heading">
+          <div>
+            <span class="eyebrow">Équipe chantier</span>
+            <h1 id="personnel-title">Équipe</h1>
+            <p>Gérez les personnes présentes, les équipes de travail et les horaires habituels.</p>
+          </div>
+          <div class="heading-actions">
+            <button type="button" class="button primary" id="add-person">+ Ajouter une personne</button>
+          </div>
+        </div>
+        <div class="personnel-overview-grid">
+          <section class="panel roster-panel">
+            <div class="panel-title-row">
+              <div><span class="eyebrow">Semaine ouverte</span><h2>Présents cette semaine</h2></div>
+              <button type="button" class="button secondary small" id="manage-week-roster-personnel">Gérer les présents</button>
+            </div>
+            <div id="roster-summary" class="roster-summary"></div>
+          </section>
+          <section class="panel teams-panel">
+            <div class="panel-title-row">
+              <div><span class="eyebrow">Organisation</span><h2>Équipes de travail</h2></div>
+              <button type="button" class="button secondary small" id="add-team">+ Créer une équipe</button>
+            </div>
+            <div id="team-list" class="team-list"></div>
+          </section>
+        </div>
+        <div class="panel">
+          <div class="toolbar compact personnel-toolbar">
+            <label class="search-field">
+              <span aria-hidden="true">⌕</span>
+              <input id="personnel-search" type="search" placeholder="Rechercher dans l'équipe">
+            </label>
+            <label class="switch-field">
+              <input id="show-inactive-people" type="checkbox">
+              <span>Afficher les inactifs</span>
+            </label>
+            <button type="button" class="button secondary small" id="toggle-personnel-selection">Sélection rapide</button>
+            <div id="personnel-bulk-actions" class="personnel-bulk-actions" hidden>
+              <label class="select-all-field"><input id="select-all-personnel" type="checkbox"><span>Tout sélectionner</span></label>
+              <strong id="personnel-selection-count">0 sélectionnée</strong>
+              <button type="button" class="button secondary small" id="bulk-deactivate-personnel" disabled>Rendre inactifs</button>
+              <button type="button" class="button secondary small" id="bulk-activate-personnel" disabled>Réactiver</button>
+              <button type="button" class="button ghost small" id="clear-personnel-selection">Effacer la sélection</button>
+            </div>
+          </div>
+          <div id="personnel-list" class="management-list"></div>
+        </div>
+      </section>
+
+      <section id="view-contrats" class="view" aria-labelledby="contracts-title">
+        <div class="view-heading contracts-heading">
+          <div>
+            <span class="eyebrow">Intérimaires</span>
+            <h1 id="contracts-title">Arrivées & contrats</h1>
+            <p>Suivez simplement les arrivées, fiches de liaison et fins de mission.</p>
+          </div>
+          <div class="heading-actions interim-heading-actions">
+            <button type="button" class="button primary" id="add-interim-onboarding">+ Nouvel intérimaire</button>
+            <details class="quick-actions-menu">
+              <summary class="button ghost">Plus</summary>
+              <div class="quick-actions-popover">
+                <button type="button" class="button ghost" id="add-contract">Créer un contrat existant</button>
+                <button type="button" class="button ghost" id="open-contract-settings">⚙ Règles & rappels</button>
+              </div>
+            </details>
+          </div>
+        </div>
+
+        <div id="contract-stats" class="contract-summary-grid"></div>
+        <div id="contract-reminder-center" class="contract-reminder-center"></div>
+
+        <section class="panel contract-main-panel simplified-contracts">
+          <div class="toolbar compact contract-toolbar">
+            <label class="search-field">
+              <span aria-hidden="true">⌕</span>
+              <input id="contract-search" type="search" placeholder="Rechercher un intérimaire ou une agence">
+            </label>
+            <label class="compact-select">Afficher
+              <select id="contract-status-filter">
+                <option value="all">Tous les contrats actuels</option>
+                <option value="attention">À renouveler / vérifier</option>
+                <option value="liaison">Fiche de liaison à préparer</option>
+                <option value="active">En cours</option>
+                <option value="upcoming">À venir</option>
+                <option value="expired">Terminés</option>
+                <option value="missing">Sans contrat</option>
+                <option value="closed">Clôturés</option>
+              </select>
+            </label>
+            <button type="button" class="button ghost small" id="toggle-contract-history">Voir l’historique</button>
+          </div>
+          <div id="contract-list" class="contract-list simplified-list"></div>
+        </section>
+      </section>
+
+      <section id="view-outils" class="view" aria-labelledby="tools-title">
+        <div class="view-heading">
+          <div>
+            <span class="eyebrow">Outils secondaires</span>
+            <h1 id="tools-title">Plus</h1>
+            <p>Les fonctions utilisées moins souvent sont regroupées ici pour garder l’application simple au quotidien.</p>
+          </div>
+        </div>
+        <div class="tools-grid">
+          <button type="button" class="panel tool-card" data-view="semaine">
+            <span class="tool-icon">▦</span><span><strong>Synthèse semaine</strong><small>Contrôler les heures, les anomalies et verrouiller la semaine.</small></span><b>›</b>
+          </button>
+          <button type="button" class="panel tool-card" data-view="exports">
+            <span class="tool-icon">⇩</span><span><strong>Exports & sauvegardes</strong><small>Excel, PDF, sauvegarde locale et paramètres chantier.</small></span><b>›</b>
+          </button>
+          <article class="panel tool-card-info">
+            <span class="tool-icon">☁</span><span><strong>Connexion en ligne</strong><small>Structure préparée. Le mode partagé sera activé plus tard sans changer l’usage actuel.</small></span><span class="status-pill muted">À venir</span>
+          </article>
+        </div>
+      </section>
+
+      <section id="view-taches" class="view" aria-labelledby="tasks-title">
+        <div class="view-heading">
+          <div>
+            <span class="eyebrow">Bibliothèque chantier</span>
+            <h1 id="tasks-title">Tâches de ventilation</h1>
+            <p>Une tâche désactivée reste dans l'historique mais n'est plus proposée lors des nouvelles saisies.</p>
+          </div>
+          <div class="heading-actions">
+            <button type="button" class="button primary" id="add-task">+ Ajouter une tâche</button>
+          </div>
+        </div>
+        <div class="panel">
+          <label class="search-field standalone-search">
+            <span aria-hidden="true">⌕</span>
+            <input id="task-search" type="search" placeholder="Rechercher une tâche">
+          </label>
+          <div id="task-list" class="management-list task-management-list"></div>
+        </div>
+      </section>
+
+      <section id="view-exports" class="view" aria-labelledby="exports-title">
+        <div class="view-heading">
+          <div>
+            <span class="eyebrow">Sorties et sauvegardes</span>
+            <h1 id="exports-title">Exports & paramètres</h1>
+            <p>Les données restent sur l'appareil pour le moment. Les réglages en ligne seront ajoutés plus tard.</p>
+          </div>
+          <div class="heading-actions"><button type="button" class="button ghost" data-view="outils">← Plus</button></div>
+        </div>
+
+        <div class="export-grid">
+          <article class="panel export-card featured">
+            <div class="export-icon">iB</div>
+            <div>
+              <span class="eyebrow">Saisie administrative simplifiée</span>
+              <h2>Export Saisie iBAT</h2>
+              <p>Une lecture pensée pour la secrétaire : une ligne par compagnon et par tâche, avec les heures du lundi au vendredi. Un total par personne et une seconde feuille jour par jour permettent de ressaisir iBAT sans rechercher les heures dans la ventilation.</p>
+            </div>
+            <div class="split-actions">
+              <button type="button" class="button primary" id="export-ibat">Exporter iBAT</button>
+              <button type="button" class="button secondary" id="share-ibat-secretary">Partager à la secrétaire</button>
+            </div>
+          </article>
+
+          <article class="panel export-card">
+            <div class="export-icon">X</div>
+            <div>
+              <span class="eyebrow">Classeur compatible Excel</span>
+              <h2>Classeur Excel complet</h2>
+              <p>Génère la ventilation, les récapitulatifs, le suivi des contrats et une feuille de pointage individuelle pour chaque intérimaire.</p>
+            </div>
+            <button type="button" class="button primary" id="export-excel">Exporter le classeur .xlsx</button>
+          </article>
+
+          <article class="panel export-card">
+            <div class="export-icon">PDF</div>
+            <div>
+              <span class="eyebrow">Rapport hebdomadaire</span>
+              <h2>Impression / PDF</h2>
+              <p>Ouvre une version propre de la synthèse hebdomadaire, prête à être enregistrée en PDF.</p>
+            </div>
+            <button type="button" class="button secondary" id="export-pdf">Imprimer la semaine</button>
+          </article>
+
+          <article class="panel export-card">
+            <div class="export-icon">CSV</div>
+            <div>
+              <span class="eyebrow">Données simples</span>
+              <h2>Détail des saisies</h2>
+              <p>Une ligne par personne, jour et tâche, facile à reprendre dans Excel ou Power Query.</p>
+            </div>
+            <button type="button" class="button secondary" id="export-csv">Exporter en CSV</button>
+          </article>
+
+          <article class="panel export-card">
+            <div class="export-icon">↻</div>
+            <div>
+              <span class="eyebrow">Sauvegarde complète</span>
+              <h2>Copie de sécurité</h2>
+              <p>Exporte ou restaure l'ensemble des semaines, du personnel et des tâches.</p>
+            </div>
+            <div class="split-actions">
+              <button type="button" class="button secondary" id="export-json">Sauvegarder</button>
+              <button type="button" class="button ghost" id="import-json-button">Restaurer</button>
+              <input id="import-json-file" type="file" accept="application/json,.json" hidden>
+            </div>
+          </article>
+        </div>
+
+        <div class="settings-grid">
+          <div class="panel">
+            <div class="panel-title-row">
+              <div>
+                <span class="eyebrow">Paramètres</span>
+                <h2>Informations chantier</h2>
+              </div>
+            </div>
+            <form id="project-form" class="form-grid">
+              <label>Nom du chantier<input id="project-name" required></label>
+              <label>Code chantier<input id="project-code"></label>
+              <label>Encadrement<input id="project-management"></label>
+              <label class="full-width">E-mail secrétaire / administratif<input id="project-secretary-email" type="email" placeholder="Ex. secretariat@gcc.fr"><small>Utilisé pour préparer le partage des pointages.</small></label>
+              <div class="form-actions full-width">
+                <button class="button primary" type="submit">Enregistrer</button>
+              </div>
+            </form>
+          </div>
+
+          <div class="panel">
+            <div class="panel-title-row">
+              <div><span class="eyebrow">Horaires</span><h2>Horaires par défaut</h2></div>
+            </div>
+            <form id="default-schedules-form" class="default-schedules-form">
+              <div class="default-schedule-block">
+                <div class="default-schedule-title"><strong>Salariés GCC</strong><button type="button" class="button ghost small" id="apply-default-gcc">Appliquer aux GCC actifs</button></div>
+                <div class="default-schedule-grid" id="default-schedule-gcc"></div>
+              </div>
+              <div class="default-schedule-block">
+                <div class="default-schedule-title"><strong>Intérimaires</strong><button type="button" class="button ghost small" id="apply-default-interim">Appliquer aux intérimaires actifs</button></div>
+                <div class="default-schedule-grid" id="default-schedule-interim"></div>
+              </div>
+              <div class="default-schedule-block">
+                <div class="default-schedule-title"><strong>Prêt de Main d’œuvre</strong><button type="button" class="button ghost small" id="apply-default-pretmo">Appliquer aux prêts MO actifs</button></div>
+                <div class="default-schedule-grid" id="default-schedule-pretmo"></div>
+              </div>
+              <div class="form-actions"><button class="button primary" type="submit">Enregistrer les horaires</button></div>
+            </form>
+          </div>
+
+          <div class="panel danger-panel">
+            <div>
+              <span class="eyebrow">Maintenance</span>
+              <h2>Vider ce chantier</h2>
+              <p>Supprime le personnel, les tâches et tous les pointages du chantier ouvert, sans supprimer les autres chantiers.</p>
+            </div>
+            <button type="button" class="button danger" id="reset-app">Vider ce chantier</button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <nav class="bottom-nav" aria-label="Navigation mobile">
+      <button class="active" data-view="pointage" type="button"><span>◷</span><small>Pointage</small></button>
+      <button data-view="taches" type="button"><span>✓</span><small>Tâches</small></button>
+      <button data-view="personnel" type="button"><span>♟</span><small>Équipe</small></button>
+      <button data-view="contrats" type="button"><span>⌁</span><small>Intérim</small></button>
+      <button data-view="outils" type="button"><span>•••</span><small>Plus</small></button>
+    </nav>
+  </div>
+
+  <dialog id="project-dialog" class="modal small-modal">
+    <form method="dialog" class="modal-shell" id="project-create-form">
+      <div class="modal-header">
+        <div><span class="eyebrow">Portefeuille chantier</span><h2 id="project-dialog-title">Nouveau chantier</h2><p>Les données seront séparées des autres chantiers.</p></div>
+        <button type="button" class="icon-button close-dialog" data-dialog="project-dialog" aria-label="Fermer">×</button>
+      </div>
+      <div class="modal-body form-grid">
+        <input id="project-dialog-id" type="hidden">
+        <label class="full-width">Nom du chantier<input id="new-project-name" required placeholder="Ex. EHPAD Thiers"></label>
+        <label>Code chantier<input id="new-project-code" placeholder="Ex. C2128"></label>
+        <label>Encadrement<input id="new-project-management" placeholder="Conducteur / chef"></label>
+      </div>
+      <div class="modal-footer compact-footer">
+        <button type="button" class="button ghost close-dialog" data-dialog="project-dialog">Annuler</button>
+        <button type="submit" class="button primary">Enregistrer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="pointage-dialog" class="modal pointage-modal">
+    <form method="dialog" class="modal-shell" id="pointage-form">
+      <div class="modal-header">
+        <div>
+          <span class="eyebrow" id="pointage-dialog-day">Lundi</span>
+          <h2 id="pointage-dialog-person">Pointage</h2>
+          <p id="pointage-dialog-meta"></p>
+        </div>
+        <button type="button" class="icon-button close-dialog" data-dialog="pointage-dialog" aria-label="Fermer">×</button>
+      </div>
+      <div class="modal-body">
+        <fieldset class="status-fieldset">
+          <legend>Statut de la journée</legend>
+          <div id="day-status-options" class="status-options"></div>
+        </fieldset>
+
+        <div id="absence-note-block" class="absence-note-block" hidden>
+          <label>Observation d'absence
+            <input id="absence-note" placeholder="Facultatif">
+          </label>
+        </div>
+
+        <div id="entries-editor">
+          <div class="late-option-block">
+            <label class="late-toggle">
+              <input type="checkbox" id="late-checkbox">
+              <span class="late-checkmark">✓</span>
+              <span class="late-copy"><strong>Retard</strong><small>La journée peut être inférieure à l’horaire théorique sans créer d’anomalie bloquante.</small></span>
+            </label>
+            <div id="late-note-block" class="late-note-block" hidden>
+              <label>Motif / observation du retard
+                <input id="late-note" placeholder="Facultatif — ex. arrivée à 8h15">
+              </label>
+            </div>
+          </div>
+          <div class="editor-title-row">
+            <div>
+              <span class="eyebrow">Ventilation</span>
+              <h3>Tâches réalisées</h3>
+            </div>
+            <button type="button" class="button ghost small" id="copy-previous-day">Copier le jour précédent</button>
+          </div>
+          <div id="entry-lines" class="entry-lines"></div>
+          <button type="button" class="add-line-button" id="add-entry-line">+ Ajouter une tâche</button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <div class="modal-total">
+          <span>Total de la journée</span>
+          <strong id="pointage-dialog-total">0 h</strong>
+          <small id="pointage-dialog-target">Horaire théorique : 0 h</small>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="button ghost close-dialog pointage-cancel-action" data-dialog="pointage-dialog">Annuler</button>
+          <button type="submit" class="button primary pointage-save-action"><span class="save-label-desktop">Enregistrer</span><span class="save-label-mobile">Enregistrer → suivant</span></button>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="bulk-dialog" class="modal small-modal">
+    <form method="dialog" class="modal-shell" id="bulk-form">
+      <div class="modal-header">
+        <div><span class="eyebrow">Saisie groupée</span><h2>Affecter la sélection</h2><p id="bulk-dialog-meta"></p></div>
+        <button type="button" class="icon-button close-dialog" data-dialog="bulk-dialog" aria-label="Fermer">×</button>
+      </div>
+      <div class="modal-body form-stack">
+        <label>Tâche<select id="bulk-task" required></select></label>
+        <label>Nombre d'heures<input id="bulk-hours" type="number" min="0.25" max="24" step="0.25" value="7.5" required></label>
+        <label>Observation<input id="bulk-note" placeholder="Facultatif"></label>
+        <label>Mode d'affectation
+          <select id="bulk-mode">
+            <option value="add">Ajouter aux heures déjà saisies</option>
+            <option value="replace">Remplacer la journée complète</option>
+          </select>
+        </label>
+      </div>
+      <div class="modal-footer compact-footer">
+        <button type="button" class="button ghost close-dialog" data-dialog="bulk-dialog">Annuler</button>
+        <button type="submit" class="button primary">Appliquer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="person-dialog" class="modal">
+    <form method="dialog" class="modal-shell" id="person-form">
+      <div class="modal-header">
+        <div><span class="eyebrow">Équipe chantier</span><h2 id="person-dialog-title">Ajouter une personne</h2></div>
+        <button type="button" class="icon-button close-dialog" data-dialog="person-dialog" aria-label="Fermer">×</button>
+      </div>
+      <div class="modal-body">
+        <input id="person-id" type="hidden">
+        <div class="form-grid">
+          <label class="full-width">Nom et prénom<input id="person-name" required></label>
+          <label>Type<select id="person-type"><option>GCC</option><option>Intérim</option><option value="Prêt de MO">Prêt de Main d’œuvre</option></select></label>
+          <label>Entreprise / agence<input id="person-company" required></label>
+          <label id="person-travel-zone-field">Zone de déplacement<input id="person-travel-zone" placeholder="Ex. Z1, Z2, Z5" autocomplete="off"></label>
+          <label class="switch-field align-end"><input id="person-active" type="checkbox" checked><span>Personne active</span></label>
+        </div>
+        <div class="schedule-editor">
+          <span class="eyebrow">Horaires théoriques</span>
+          <div class="schedule-grid" id="schedule-grid"></div>
+        </div>
+      </div>
+      <div class="modal-footer compact-footer">
+        <button type="button" class="button ghost close-dialog" data-dialog="person-dialog">Annuler</button>
+        <button type="submit" class="button primary">Enregistrer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="contract-dialog" class="modal">
+    <form method="dialog" class="modal-shell" id="contract-form">
+      <div class="modal-header">
+        <div><span class="eyebrow">Contrat intérimaire</span><h2 id="contract-dialog-title">Ajouter un contrat</h2><p id="contract-dialog-help">Les quatre informations essentielles suffisent pour démarrer.</p></div>
+        <button type="button" class="icon-button close-dialog" data-dialog="contract-dialog" aria-label="Fermer">×</button>
+      </div>
+      <div class="modal-body contract-form-simple">
+        <input id="contract-id" type="hidden">
+        <div class="essential-contract-fields">
+          <label class="full-width">Intérimaire<select id="contract-person" required></select></label>
+          <label>Agence<input id="contract-agency" required placeholder="Ex. Adéquat"></label>
+          <label>Poste <input id="contract-position" placeholder="Ex. Coffreur"></label>
+          <label>Date de début<input id="contract-start" type="date" required></label>
+          <label>Date de fin<input id="contract-initial-end" type="date" required></label>
+        </div>
+
+        <details class="advanced-contract-details">
+          <summary>Informations complémentaires</summary>
+          <div class="form-grid advanced-contract-grid">
+            <label>N° contrat / commande<input id="contract-number"></label>
+            <label>Motif du recours
+              <select id="contract-reason">
+                <option value="Accroissement temporaire">Accroissement temporaire d’activité</option>
+                <option value="Remplacement">Remplacement</option>
+                <option value="Travaux urgents sécurité">Travaux urgents de sécurité</option>
+                <option value="Saisonnier ou usage">Saisonnier / emploi d’usage</option>
+                <option value="Autre">Autre</option>
+              </select>
+            </label>
+            <label>Durée maximale spécifique (mois)<input id="contract-max-months" type="number" min="1" max="60" step="1" placeholder="Règle chantier par défaut"></label>
+            <label class="switch-field align-end"><input id="contract-carence-exempt" type="checkbox"><span>Cas déclaré sans carence</span></label>
+            <label class="full-width">Observation<textarea id="contract-note" rows="3" placeholder="Précision utile, avenant attendu…"></textarea></label>
+            <label class="switch-field full-width"><input id="contract-closed" type="checkbox"><span>Mission clôturée manuellement</span></label>
+          </div>
+        </details>
+      </div>
+      <div class="modal-footer compact-footer contract-modal-footer">
+        <button type="button" class="button danger-outline" id="delete-contract-dialog" hidden>Supprimer</button>
+        <span class="footer-spacer"></span>
+        <button type="button" class="button ghost close-dialog" data-dialog="contract-dialog">Annuler</button>
+        <button type="submit" class="button primary">Enregistrer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="liaison-dialog" class="modal">
+    <form method="dialog" class="modal-shell" id="liaison-form">
+      <div class="modal-header">
+        <div><span class="eyebrow">Préparation de l’arrivée</span><h2>Fiche de liaison intérimaire</h2><p id="liaison-dialog-meta"></p></div>
+        <button type="button" class="icon-button close-dialog" data-dialog="liaison-dialog" aria-label="Fermer">×</button>
+      </div>
+      <div class="modal-body liaison-modal-body">
+        <input id="liaison-contract-id" type="hidden">
+        <div class="liaison-step-card primary-step">
+          <div><span class="step-number">1</span><div><strong>Agence d’intérim</strong><small>Renseignez l’adresse utilisée pour préparer le mail.</small></div></div>
+          <label>Email agence<input id="liaison-agency-email" type="email" placeholder="agence@exemple.fr"></label>
+        </div>
+        <div class="liaison-step-card">
+          <div><span class="step-number">2</span><div><strong>Envoyer la demande</strong><small>En mode local, l’application prépare le mail. L’envoi automatique sera activé plus tard.</small></div></div>
+          <div class="liaison-inline-actions">
+            <button type="button" class="button primary" id="prepare-liaison-email">Préparer le mail</button>
+            <button type="button" class="button secondary" id="print-liaison-sheet">Fiche PDF / impression</button>
+            <button type="button" class="button ghost" id="mark-liaison-sent">Marquer envoyée</button>
+          </div>
+        </div>
+        <div class="liaison-step-card">
+          <div><span class="step-number">3</span><div><strong>Retour de l’agence</strong><small>Les informations peuvent être saisies ici manuellement jusqu’à la mise en ligne du formulaire agence.</small></div></div>
+          <label>État de la fiche<select id="liaison-status"><option value="to_send">À envoyer</option><option value="sent">Envoyée</option><option value="completed">Complétée par l’agence</option><option value="validated">Validée</option></select></label>
+          <details class="advanced-contract-details liaison-agency-fields">
+            <summary>Informations transmises par l’agence</summary>
+            <div class="form-grid advanced-contract-grid">
+              <label>Taux horaire (€)<input id="liaison-hourly-rate" type="number" min="0" step="0.01"></label>
+              <label>Coefficient / taux de facturation<input id="liaison-billing-coefficient" type="number" min="0" step="0.001"></label>
+              <label>Panier repas (€)<input id="liaison-meal-allowance" type="number" min="0" step="0.01"></label>
+              <label>Indemnité trajet (€)<input id="liaison-travel-allowance" type="number" min="0" step="0.01"></label>
+              <label>Indemnité transport (€)<input id="liaison-transport-allowance" type="number" min="0" step="0.01"></label>
+              <label>Durée hebdomadaire (h)<input id="liaison-weekly-hours" type="number" min="0" max="60" step="0.25"></label>
+              <label>Contact agence<input id="liaison-contact-name"></label>
+              <label>Téléphone agence<input id="liaison-contact-phone" type="tel"></label>
+              <label class="full-width">Observation<textarea id="liaison-note" rows="3"></textarea></label>
+            </div>
+          </details>
+        </div>
+        <div class="future-online-note"><strong>Mode actuel : local</strong><span>Les alertes sont calculées dans l’application. Plus tard, le même module pourra envoyer automatiquement le mail, fournir un lien sécurisé à l’agence et recevoir la fiche complétée.</span></div>
+      </div>
+      <div class="modal-footer compact-footer">
+        <button type="button" class="button ghost close-dialog" data-dialog="liaison-dialog">Fermer</button>
+        <button type="submit" class="button primary">Enregistrer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="contract-rules-dialog" class="modal small-modal">
+    <form method="dialog" class="modal-shell" id="contract-rules-form">
+      <div class="modal-header">
+        <div><span class="eyebrow">Paramètres chantier</span><h2>Règles de suivi</h2><p>Ces réglages servent aux alertes internes et restent à confirmer avec les RH ou l’agence.</p></div>
+        <button type="button" class="icon-button close-dialog" data-dialog="contract-rules-dialog" aria-label="Fermer">×</button>
+      </div>
+      <div class="modal-body form-stack">
+        <label>Renouvellements maximum<input id="rule-max-renewals" type="number" min="0" max="10" step="1" value="2"></label>
+        <label>Durée maximale par défaut (mois)<input id="rule-max-months" type="number" min="1" max="60" step="1" value="18"></label>
+        <label>Alertes fin de contrat (jours)<input id="rule-alert-days" value="21, 14, 7, 2" placeholder="Ex. 21, 14, 7, 2"></label>
+        <label>Rappels fiche de liaison avant arrivée (jours)<input id="rule-arrival-alert-days" value="7, 2" placeholder="Ex. 7, 2"></label>
+        <button type="button" class="button secondary" id="enable-browser-notifications">Activer les notifications de l’appareil</button>
+        <small class="settings-help">En mode local, elles sont vérifiées à l’ouverture de l’application. Les notifications automatiques en arrière-plan seront activées avec la future version en ligne.</small>
+        <label>Calcul indicatif de carence<select id="rule-carence-mode"><option value="standard">Règle standard</option><option value="none">Ne pas calculer</option></select></label>
+        <label class="switch-field"><input id="rule-block-outside" type="checkbox"><span>Bloquer les heures hors contrat</span></label>
+        <label class="switch-field"><input id="rule-exclude-expired" type="checkbox" checked><span>Retirer automatiquement les missions terminées des nouvelles semaines</span></label>
+        <div class="legal-note compact-legal-note"><strong>À savoir</strong><p>Ces alertes ne remplacent pas la validation de l’agence ou des RH.</p></div>
+      </div>
+      <div class="modal-footer compact-footer">
+        <button type="button" class="button ghost close-dialog" data-dialog="contract-rules-dialog">Annuler</button>
+        <button class="button primary" type="submit">Enregistrer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="renewal-dialog" class="modal small-modal">
+    <form method="dialog" class="modal-shell" id="renewal-form">
+      <div class="modal-header">
+        <div><span class="eyebrow">Avenant</span><h2>Renouveler la mission</h2><p id="renewal-dialog-meta"></p></div>
+        <button type="button" class="icon-button close-dialog" data-dialog="renewal-dialog" aria-label="Fermer">×</button>
+      </div>
+      <div class="modal-body form-stack renewal-simple-form">
+        <input id="renewal-contract-id" type="hidden">
+        <div id="renewal-rule-summary" class="renewal-rule-summary"></div>
+        <label class="renewal-date-field">Nouvelle date de fin<input id="renewal-end" type="date" required></label>
+        <details class="advanced-contract-details">
+          <summary>Informations de l’avenant</summary>
+          <div class="form-stack renewal-advanced-fields">
+            <label>Date de signature / réception<input id="renewal-signed" type="date"></label>
+            <label>Référence de l’avenant<input id="renewal-reference"></label>
+            <label>Observation<textarea id="renewal-note" rows="3"></textarea></label>
+          </div>
+        </details>
+      </div>
+      <div class="modal-footer compact-footer">
+        <button type="button" class="button ghost close-dialog" data-dialog="renewal-dialog">Annuler</button>
+        <button type="submit" class="button primary">Enregistrer le renouvellement</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="task-dialog" class="modal small-modal">
+    <form method="dialog" class="modal-shell" id="task-form">
+      <div class="modal-header">
+        <div><span class="eyebrow">Bibliothèque</span><h2 id="task-dialog-title">Ajouter une tâche</h2></div>
+        <button type="button" class="icon-button close-dialog" data-dialog="task-dialog" aria-label="Fermer">×</button>
+      </div>
+      <div class="modal-body form-stack">
+        <input id="task-id" type="hidden">
+        <label>Nom de la tâche<input id="task-name" required></label>
+        <label class="switch-field"><input id="task-active" type="checkbox" checked><span>Tâche active</span></label>
+      </div>
+      <div class="modal-footer compact-footer">
+        <button type="button" class="button ghost close-dialog" data-dialog="task-dialog">Annuler</button>
+        <button type="submit" class="button primary">Enregistrer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="roster-dialog" class="modal">
+    <form method="dialog" class="modal-shell" id="roster-form">
+      <div class="modal-header">
+        <div><span class="eyebrow">Équipe de la semaine</span><h2 id="roster-dialog-title">Présents cette semaine</h2><p>Décochez les personnes absentes de toute la semaine. Leurs anciens pointages ne sont jamais supprimés.</p></div>
+        <button type="button" class="icon-button close-dialog" data-dialog="roster-dialog" aria-label="Fermer">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="roster-toolbar">
+          <label class="search-field"><span aria-hidden="true">⌕</span><input id="roster-search" type="search" placeholder="Rechercher une personne"></label>
+          <button type="button" class="button ghost small" id="roster-select-all">Tout cocher</button>
+          <button type="button" class="button ghost small" id="roster-clear-all">Tout décocher</button>
+        </div>
+        <div id="roster-list" class="roster-list"></div>
+      </div>
+      <div class="modal-footer compact-footer">
+        <button type="button" class="button ghost close-dialog" data-dialog="roster-dialog">Annuler</button>
+        <button type="submit" class="button primary">Enregistrer les présents</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="team-dialog" class="modal">
+    <form method="dialog" class="modal-shell" id="team-form">
+      <div class="modal-header">
+        <div><span class="eyebrow">Organisation chantier</span><h2 id="team-dialog-title">Créer une équipe</h2><p>Une personne peut appartenir à plusieurs équipes.</p></div>
+        <button type="button" class="icon-button close-dialog" data-dialog="team-dialog" aria-label="Fermer">×</button>
+      </div>
+      <div class="modal-body">
+        <input id="team-id" type="hidden">
+        <label class="full-width">Nom de l’équipe<input id="team-name" required placeholder="Ex. Équipe voiles"></label>
+        <div class="team-member-heading"><strong>Membres</strong><small>Sélectionnez les personnes à affecter à l’équipe.</small></div>
+        <div id="team-member-list" class="roster-list team-member-list"></div>
+      </div>
+      <div class="modal-footer compact-footer">
+        <button type="button" class="button ghost close-dialog" data-dialog="team-dialog">Annuler</button>
+        <button type="submit" class="button primary">Enregistrer l’équipe</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="copy-day-dialog" class="modal small-modal">
+    <form method="dialog" class="modal-shell" id="copy-day-form">
+      <div class="modal-header">
+        <div><span class="eyebrow">Duplication rapide</span><h2>Copier une journée</h2><p>Copie les tâches et les absences de tous les présents.</p></div>
+        <button type="button" class="icon-button close-dialog" data-dialog="copy-day-dialog" aria-label="Fermer">×</button>
+      </div>
+      <div class="modal-body form-stack">
+        <label>Jour source<select id="copy-source-day"></select></label>
+        <label>Jour de destination<select id="copy-target-day"></select></label>
+        <label class="switch-field"><input id="copy-overwrite-day" type="checkbox" checked><span>Remplacer les saisies déjà présentes</span></label>
+      </div>
+      <div class="modal-footer compact-footer">
+        <button type="button" class="button ghost close-dialog" data-dialog="copy-day-dialog">Annuler</button>
+        <button type="submit" class="button primary">Copier la journée</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="week-picker-dialog" class="modal small-modal">
+    <form method="dialog" class="modal-shell" id="week-picker-form">
+      <div class="modal-header">
+        <div><span class="eyebrow">Navigation</span><h2>Choisir une semaine</h2></div>
+        <button type="button" class="icon-button close-dialog" data-dialog="week-picker-dialog" aria-label="Fermer">×</button>
+      </div>
+      <div class="modal-body form-stack">
+        <label>Année<input id="picker-year" type="number" min="2020" max="2100" required></label>
+        <label>Semaine<input id="picker-week" type="number" min="1" max="53" required></label>
+      </div>
+      <div class="modal-footer compact-footer">
+        <button type="button" class="button ghost close-dialog" data-dialog="week-picker-dialog">Annuler</button>
+        <button type="submit" class="button primary">Ouvrir</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="js/seed-data.js"></script>
+  <script src="js/excel-export.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
