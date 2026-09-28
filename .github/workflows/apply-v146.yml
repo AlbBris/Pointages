@@ -1,0 +1,35 @@
+name: Appliquer V1.14.6
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/v146.patch'
+      - '.github/workflows/apply-v146.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Appliquer la mise à jour V1.14.6
+        shell: bash
+        run: |
+          if [ ! -f .github/v146.patch ]; then
+            echo "Patch déjà appliqué."
+            exit 0
+          fi
+          git apply --check .github/v146.patch
+          git apply .github/v146.patch
+          rm .github/v146.patch
+          git config user.name "OpenAI ChatGPT"
+          git config user.email "chatgpt@users.noreply.github.com"
+          git add -A
+          git commit -m "Mise à jour Pointages V1.14.6"
+          git push
