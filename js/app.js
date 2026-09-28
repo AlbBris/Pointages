@@ -1538,8 +1538,7 @@ Cordialement`;
     if (!ui.entryDraft.length && !absence && !isWeekLocked()) addDraftLine(false);
     renderEntryLines();
     document.querySelectorAll('#entry-lines input, #entry-lines select, #entry-lines button, #add-entry-line, #copy-previous-day').forEach(element => element.disabled = isWeekLocked());
-    const submit = document.querySelector('#pointage-form button[type="submit"]');
-    submit.hidden = isWeekLocked();
+    document.querySelectorAll('#pointage-form button[type="submit"]').forEach(button => { button.hidden = isWeekLocked(); });
     updatePointageStatusDisplay();
     document.getElementById('pointage-dialog').showModal();
   }
@@ -1631,7 +1630,9 @@ Cordialement`;
     event.preventDefault();
     if (!assertWeekEditable()) return;
     if (!ui.editingPointage) return;
-    const advanceAfterSave = Boolean(window.matchMedia?.('(max-width: 680px)').matches);
+    const isMobilePointage = Boolean(window.matchMedia?.('(max-width: 680px)').matches);
+    const saveMode = isMobilePointage ? 'next' : (event.submitter?.dataset?.saveMode || 'close');
+    const advanceAfterSave = saveMode === 'next';
     const { personId, day } = ui.editingPointage;
     const status = selectedStatusCode();
     const lateChecked = status === 'PRESENT' && document.getElementById('late-checkbox').checked;
@@ -1959,7 +1960,7 @@ Cordialement`;
     document.body.appendChild(link);
     link.click();
     link.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1500);
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
   }
 
   function exportCsv() {

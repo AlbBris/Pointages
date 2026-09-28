@@ -1,4 +1,4 @@
-const CACHE = 'pointages-gcc-v1.14.4-zone-deplacement-always';
+const CACHE = 'pointages-gcc-v1.14.6-excel-safe';
 const ASSETS = [
   './', './index.html', './css/styles.css', './js/seed-data.js', './js/excel-export.js', './js/app.js',
   './manifest.webmanifest', './assets/logo-pointages-app.png', './assets/icon-192.png', './assets/icon-512.png', './assets/apple-touch-icon.png', './assets/favicon-32.png'

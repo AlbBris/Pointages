@@ -1680,3 +1680,12 @@ button.tool-card:hover { transform: translateY(-1px); box-shadow: var(--shadow);
   .pointage-modal .pointage-cancel-action { font-size: 11px; padding-inline: 7px !important; }
   .pointage-modal .pointage-save-action { white-space: nowrap; }
 }
+
+/* V1.14.6 — pointage rapide : deux actions sur ordinateur, parcours suivant sur mobile */
+@media (max-width: 680px) {
+  .pointage-modal .pointage-save-close-action { display: none !important; }
+  .pointage-modal .pointage-save-action { flex: 1; }
+}
+@media (min-width: 681px) {
+  .pointage-modal .modal-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+}
