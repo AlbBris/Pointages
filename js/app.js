@@ -2032,17 +2032,17 @@ Cordialement`;
     }
   }
 
-  function createIbatExport() {
+  async function createIbatExport() {
     if (!window.GCCExcelExporter?.exportIbatWorkbook) {
       showToast('Le module d’export iBAT n’est pas disponible. Rechargez l’application.', true);
       return null;
     }
-    return window.GCCExcelExporter.exportIbatWorkbook(buildExportContext());
+    return await window.GCCExcelExporter.exportIbatWorkbook(buildExportContext());
   }
 
-  function exportIbatWorkbook() {
+  async function exportIbatWorkbook() {
     try {
-      const output = createIbatExport();
+      const output = await createIbatExport();
       if (!output) return;
       downloadBlob(output.blob, output.filename, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       showToast('Export Saisie iBAT généré.');
@@ -2054,7 +2054,7 @@ Cordialement`;
 
   async function shareIbatWithSecretary() {
     try {
-      const output = createIbatExport();
+      const output = await createIbatExport();
       if (!output) return;
       const email = String(db.project.secretaryEmail || '').trim();
       const file = new File([output.blob], output.filename, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
