@@ -277,7 +277,8 @@
     return `<c r="${ref}" t="inlineStr"${style}><is><t xml:space="preserve">${escapeXml(value)}</t></is></c>`;
   }
 
-  function worksheetXml(sheet) {
+  function worksheetXml(sheet, options = {}) {
+    const excelSafe = Boolean(options.excelSafe);
     // Une seule cellule XML par coordonnée : les cellules ajoutées en dernier
     // (formules, totaux ou libellés) remplacent proprement les fonds préformatés.
     const byRow = new Map();
@@ -308,27 +309,27 @@
       ? `<pane${sheet.freeze.xSplit ? ` xSplit="${sheet.freeze.xSplit}"` : ''}${sheet.freeze.ySplit ? ` ySplit="${sheet.freeze.ySplit}"` : ''} topLeftCell="${sheet.freeze.topLeftCell || 'A1'}" activePane="${sheet.freeze.activePane || 'bottomRight'}" state="frozen"/>`
       : '';
     const merges = (sheet.merges || []).length ? `<mergeCells count="${sheet.merges.length}">${sheet.merges.map(ref => `<mergeCell ref="${ref}"/>`).join('')}</mergeCells>` : '';
-    const autoFilter = sheet.autoFilter ? `<autoFilter ref="${sheet.autoFilter}"/>` : '';
+    const autoFilter = !excelSafe && sheet.autoFilter ? `<autoFilter ref="${sheet.autoFilter}"/>` : '';
     const orientation = sheet.orientation || 'landscape';
     const paperSize = sheet.paperSize || (orientation === 'landscape' ? 8 : 9);
     const fitToHeight = Number.isInteger(sheet.fitToHeight) ? sheet.fitToHeight : 0;
     const margins = sheet.margins || { left: 0.25, right: 0.25, top: 0.45, bottom: 0.45, header: 0.2, footer: 0.2 };
-    const headerFooter = sheet.headerFooter
+    const headerFooter = !excelSafe && sheet.headerFooter
       ? `<headerFooter><oddHeader>${escapeXml(sheet.headerFooter.header || '')}</oddHeader><oddFooter>${escapeXml(sheet.headerFooter.footer || '')}</oddFooter></headerFooter>`
       : '';
     const tabColor = sheet.tabColor ? `<tabColor rgb="${sheet.tabColor}"/>` : '';
     return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-  <sheetPr>${tabColor}<pageSetUpPr fitToPage="1" autoPageBreaks="0"/></sheetPr>
-  <dimension ref="A1:${cellRef(maxRow, maxCol)}"/>
+  <sheetPr>${tabColor}${excelSafe ? '' : '<pageSetUpPr fitToPage="1" autoPageBreaks="0"/>'}</sheetPr>
+  ${excelSafe ? '' : `<dimension ref="A1:${cellRef(maxRow, maxCol)}"/>`}
   <sheetViews><sheetView workbookViewId="0" showGridLines="${sheet.showGridLines === false ? 0 : 1}">${freeze}</sheetView></sheetViews>
   <sheetFormatPr defaultRowHeight="15"/>
   ${colsXml}
   <sheetData>${rowXml}</sheetData>
   ${autoFilter}${merges}
-  <printOptions horizontalCentered="1" verticalCentered="0"/>
-  <pageMargins left="${margins.left}" right="${margins.right}" top="${margins.top}" bottom="${margins.bottom}" header="${margins.header}" footer="${margins.footer}"/>
-  <pageSetup paperSize="${paperSize}" orientation="${orientation}" fitToWidth="1" fitToHeight="${fitToHeight}" horizontalDpi="300" verticalDpi="300"/>
+  ${excelSafe ? '' : '<printOptions horizontalCentered="1" verticalCentered="0"/>'}
+  <pageMargins left="${excelSafe ? 0.7 : margins.left}" right="${excelSafe ? 0.7 : margins.right}" top="${excelSafe ? 0.75 : margins.top}" bottom="${excelSafe ? 0.75 : margins.bottom}" header="${excelSafe ? 0.3 : margins.header}" footer="${excelSafe ? 0.3 : margins.footer}"/>
+  ${excelSafe ? '' : `<pageSetup paperSize="${paperSize}" orientation="${orientation}" fitToWidth="1" fitToHeight="${fitToHeight}" horizontalDpi="300" verticalDpi="300"/>`}
   ${headerFooter}
 </worksheet>`;
   }
@@ -1477,6 +1478,9 @@ ${formatDateFr(dateForDay(weekInfo.year, weekInfo.week, day)).slice(0, 5)}`), 'T
   }
 
   function buildIbatPackage(context) {
+    // Structure OOXML volontairement minimale pour une compatibilité Excel maximale.
+    // Les données, styles et formules sont conservés ; les métadonnées, zones
+    // d'impression et réglages avancés non indispensables sont écartés.
     const usedNames = new Set();
     const sheets = [makeIbatSummarySheet(context), makeIbatDetailSheet(context)];
     sheets.forEach(sheet => { sheet.name = safeSheetName(sheet.name, usedNames); });
@@ -1484,24 +1488,15 @@ ${formatDateFr(dateForDay(weekInfo.year, weekInfo.week, day)).slice(0, 5)}`), 'T
     const workbookSheets = sheets.map((sheet, index) => `<sheet name="${escapeXml(sheet.name)}" sheetId="${index + 1}" r:id="rId${index + 1}"/>`).join('');
     const workbookRels = sheets.map((_, index) => `<Relationship Id="rId${index + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${index + 1}.xml"/>`).join('');
     const sheetOverrides = sheets.map((_, index) => `<Override PartName="/xl/worksheets/sheet${index + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('');
-    const titles = sheets.map(sheet => `<vt:lpstr>${escapeXml(sheet.name)}</vt:lpstr>`).join('');
-    const definedNames = sheets.flatMap((sheet, index) => {
-      const escapedName = sheet.name.replaceAll("'", "''");
-      const names = [];
-      if (sheet.printArea) names.push(`<definedName name="_xlnm.Print_Area" localSheetId="${index}" hidden="1">'${escapeXml(escapedName)}'!$${sheet.printArea.replace(':', ':$').replace(/([A-Z]+)(\d+)/g, '$1$$$2')}</definedName>`);
-      if (sheet.repeatRows) names.push(`<definedName name="_xlnm.Print_Titles" localSheetId="${index}" hidden="1">'${escapeXml(escapedName)}'!$${sheet.repeatRows.replace(':', ':$')}</definedName>`);
-      return names;
-    }).join('');
+
     const files = {
-      '[Content_Types].xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${sheetOverrides}<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>`,
-      '_rels/.rels': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/></Relationships>`,
-      'xl/workbook.xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><bookViews><workbookView xWindow="0" yWindow="0" windowWidth="24000" windowHeight="15000" activeTab="0"/></bookViews><sheets>${workbookSheets}</sheets>${definedNames ? `<definedNames>${definedNames}</definedNames>` : ''}<calcPr calcId="191029" fullCalcOnLoad="1"/></workbook>`,
+      '[Content_Types].xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${sheetOverrides}</Types>`,
+      '_rels/.rels': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`,
+      'xl/workbook.xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${workbookSheets}</sheets></workbook>`,
       'xl/_rels/workbook.xml.rels': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${workbookRels}<Relationship Id="rId${sheets.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`,
-      'xl/styles.xml': stylesXml(),
-      'docProps/core.xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>Saisie iBAT ${escapeXml(context.project.name || '')}</dc:title><dc:subject>Semaine ${context.weekInfo.week} ${context.weekInfo.year}</dc:subject><dc:creator>GCC Auvergne</dc:creator><cp:lastModifiedBy>Application Pointages GCC</cp:lastModifiedBy><dcterms:created xsi:type="dcterms:W3CDTF">${new Date().toISOString()}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${new Date().toISOString()}</dcterms:modified></cp:coreProperties>`,
-      'docProps/app.xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>Pointages GCC</Application><DocSecurity>0</DocSecurity><ScaleCrop>false</ScaleCrop><HeadingPairs><vt:vector size="2" baseType="variant"><vt:variant><vt:lpstr>Feuilles de calcul</vt:lpstr></vt:variant><vt:variant><vt:i4>${sheets.length}</vt:i4></vt:variant></vt:vector></HeadingPairs><TitlesOfParts><vt:vector size="${sheets.length}" baseType="lpstr">${titles}</vt:vector></TitlesOfParts><Company>GCC Auvergne</Company><LinksUpToDate>false</LinksUpToDate><SharedDoc>false</SharedDoc><HyperlinksChanged>false</HyperlinksChanged><AppVersion>1.14.6</AppVersion></Properties>`
+      'xl/styles.xml': stylesXml()
     };
-    sheets.forEach((sheet, index) => { files[`xl/worksheets/sheet${index + 1}.xml`] = worksheetXml(sheet); });
+    sheets.forEach((sheet, index) => { files[`xl/worksheets/sheet${index + 1}.xml`] = worksheetXml(sheet, { excelSafe: true }); });
     return { blob: zipStore(files), sheetCount: sheets.length, interimSheetCount: 0 };
   }
 
