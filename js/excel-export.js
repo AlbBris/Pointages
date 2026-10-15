@@ -43,7 +43,8 @@
     TABLE_SUBHEADER: 34,
     MUTED_TEXT: 35,
     HOURS_ALERT: 36,
-    TOTAL_STRONG: 37
+    TOTAL_STRONG: 37,
+    OTHER_SITE: 38
   };
 
   function cleanXmlText(value) {
@@ -194,7 +195,9 @@
       .filter(Boolean);
     const absences = (week.absences || [])
       .filter(item => item.personId === personId && (day === null || Number(item.day) === Number(day)))
-      .map(item => String(item.note || '').trim())
+      .map(item => item.code === 'AUTRE_CHANTIER'
+        ? [`Autre chantier : ${item.siteName || 'à préciser'}`, String(item.note || '').trim()].filter(Boolean).join(' · ')
+        : String(item.note || '').trim())
       .filter(Boolean);
     const lates = (week.lates || [])
       .filter(item => item.personId === personId && (day === null || Number(item.day) === Number(day)))
@@ -651,6 +654,7 @@ ${formatDateFr(dateForDay(weekInfo.year, weekInfo.week, day)).slice(0, 5)}`), 'T
     const tasksById = new Map(tasks.map(task => [task.id, task]));
     const cells = [];
     const merges = ['A1:L1', 'B3:D3'];
+    const rowHeights = { 1: 28, 3: 24, 5: 40 };
     cells.push(makeCell(1, 1, 'SAISIE IBAT — HEURES PAR PERSONNE ET PAR TÂCHE', STYLE.TITLE));
     cells.push(makeCell(3, 1, 'CHANTIER', STYLE.META_LABEL));
     cells.push(makeCell(3, 2, project.name || '', STYLE.META_VALUE));
@@ -708,7 +712,9 @@ ${formatDateFr(dateForDay(weekInfo.year, weekInfo.week, day)).slice(0, 5)}`), 'T
       DAY_NAMES.forEach((dayName, day) => {
         const absence = personAbsence(week, person.id, day);
         const late = personLate(week, person.id, day);
-        if (absence) statusParts.push(`${dayName.slice(0, 3)} : ${absence.code}`);
+        if (absence) statusParts.push(absence.code === 'AUTRE_CHANTIER'
+          ? `${dayName.slice(0, 3)} : Autre chantier (${absence.siteName || 'à préciser'})`
+          : `${dayName.slice(0, 3)} : ${absence.code}`);
         if (late) statusParts.push(`${dayName.slice(0, 3)} : RETARD${String(late.note || '').trim() ? ` (${String(late.note).trim()})` : ''}`);
       });
       fillRange(cells, row, row, 1, 12, subtotalStyle);
@@ -720,7 +726,13 @@ ${formatDateFr(dateForDay(weekInfo.year, weekInfo.week, day)).slice(0, 5)}`), 'T
       for (let col = 6; col <= 10; col += 1) {
         const day = col - 6;
         const cached = personDayTotal(week, person.id, day);
-        cells.push(makeFormulaCell(row, col, `SUM(${colLetter(col)}${personStartRow}:${colLetter(col)}${personEndRow})`, cached, subtotalStyle));
+        const absence = personAbsence(week, person.id, day);
+        if (absence?.code === 'AUTRE_CHANTIER') {
+          cells.push(makeCell(row, col, `↗ ${absence.siteName || 'Autre chantier'}`, STYLE.OTHER_SITE));
+          rowHeights[row] = 36;
+        } else {
+          cells.push(makeFormulaCell(row, col, `SUM(${colLetter(col)}${personStartRow}:${colLetter(col)}${personEndRow})`, cached, subtotalStyle));
+        }
       }
       cells.push(makeFormulaCell(row, 11, `SUM(F${row}:J${row})`, personWeekTotal(week, person.id), subtotalStyle));
       cells.push(makeCell(row, 12, statusParts.join(' · '), statusParts.length ? STYLE.HOURS_ALERT : subtotalStyle));
@@ -742,9 +754,9 @@ ${formatDateFr(dateForDay(weekInfo.year, weekInfo.week, day)).slice(0, 5)}`), 'T
       name: 'Saisie iBAT', cells, merges,
       columns: [
         { min: 1, width: 10 }, { min: 2, width: 25 }, { min: 3, width: 22 }, { min: 4, width: 16 }, { min: 5, width: 36 },
-        { min: 6, max: 10, width: 12 }, { min: 11, width: 14 }, { min: 12, width: 32 }
+        { min: 6, max: 10, width: 18 }, { min: 11, width: 14 }, { min: 12, width: 39 }
       ],
-      rowHeights: { 1: 28, 3: 24, 5: 40 },
+      rowHeights,
       freeze: { ySplit: 5, xSplit: 5, topLeftCell: 'F6', activePane: 'bottomRight' },
       autoFilter: `A5:L${Math.max(5, totalRow - 1)}`,
       showGridLines: false, orientation: 'landscape', paperSize: 9,
@@ -783,11 +795,12 @@ ${formatDateFr(dateForDay(weekInfo.year, weekInfo.week, day)).slice(0, 5)}`), 'T
           cells.push(makeCell(row, 6, person.travelZone || '', STYLE.TABLE_TEXT));
           cells.push(makeCell(row, 7, taskId ? (tasksById.get(taskId)?.name || 'Tâche supprimée') : '', STYLE.TABLE_TEXT));
           cells.push(makeCell(row, 8, item.hours || 0, STYLE.TABLE_NUMBER, 'number'));
-          const status = absence ? absence.code : (dayEntries.length ? 'Présent' : 'Non renseigné');
+          const status = absence ? (absence.code === 'AUTRE_CHANTIER' ? 'Autre chantier' : absence.code) : (dayEntries.length ? 'Présent' : 'Non renseigné');
           cells.push(makeCell(row, 9, status, absence ? STYLE.ABSENCE : (status === 'Non renseigné' ? STYLE.HOURS_ALERT : STYLE.TABLE_TEXT)));
           cells.push(makeCell(row, 10, late ? 'Oui' : '', late ? STYLE.HOURS_ALERT : STYLE.TABLE_TEXT));
           const notes = [...new Set([
             ...item.notes,
+            absence?.code === 'AUTRE_CHANTIER' ? `Chantier d'accueil : ${absence.siteName || 'à préciser'}` : '',
             absence && String(absence.note || '').trim() ? String(absence.note).trim() : '',
             late && String(late.note || '').trim() ? `Retard : ${String(late.note).trim()}` : ''
           ].filter(Boolean))].join(' / ');
@@ -1507,7 +1520,8 @@ ${formatDateFr(dateForDay(weekInfo.year, weekInfo.week, day)).slice(0, 5)}`), 'T
       [STYLE.DATE]: { font: baseFont, fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } }, border: thin, alignment: { horizontal: 'center', vertical: 'middle' }, numFmt: 'dd/mm/yyyy' },
       [STYLE.ABSENCE]: { font: { ...baseFont, bold: true, color: { argb: 'FF7A3D00' } }, fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFE5CC' } }, border: thin, alignment: { horizontal: 'center', vertical: 'middle', wrapText: true } },
       [STYLE.HOURS_ALERT]: { font: { ...baseFont, bold: true }, fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF4CCCC' } }, border: thin, alignment: { horizontal: 'center', vertical: 'middle' }, numFmt: '0.00' },
-      [STYLE.TOTAL_STRONG]: { font: { name: 'Arial', size: 12, bold: true, color: { argb: 'FFFFFFFF' } }, fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E78' } }, border: medium, alignment: { horizontal: 'center', vertical: 'middle' }, numFmt: '0.00' }
+      [STYLE.TOTAL_STRONG]: { font: { name: 'Arial', size: 12, bold: true, color: { argb: 'FFFFFFFF' } }, fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E78' } }, border: medium, alignment: { horizontal: 'center', vertical: 'middle' }, numFmt: '0.00' },
+      [STYLE.OTHER_SITE]: { font: { name: 'Arial', size: 10, bold: true, color: { argb: 'FF255B83' } }, fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE5F1F9' } }, border: thin, alignment: { horizontal: 'center', vertical: 'middle', wrapText: true } }
     };
     return styles[styleId] || { font: baseFont };
   }
