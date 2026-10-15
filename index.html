@@ -89,7 +89,7 @@
         </button>
       </nav>
       <div class="sidebar-footer">
-        <span>V1.14.9</span>
+        <span>V1.15.0</span>
         <small>Mode local · prêt pour connexion</small>
       </div>
     </aside>
@@ -512,6 +512,16 @@
           <label>Observation d'absence
             <input id="absence-note" placeholder="Facultatif">
           </label>
+        </div>
+        <div id="other-site-block" class="absence-note-block other-site-block" hidden>
+          <label>Chantier d'accueil
+            <input id="other-site-name" list="other-site-suggestions" autocomplete="off" placeholder="Ex. Sainte-Marie" maxlength="100">
+            <datalist id="other-site-suggestions"></datalist>
+          </label>
+          <label>Observation complémentaire
+            <input id="other-site-note" placeholder="Facultatif">
+          </label>
+          <small>Ces heures ne sont pas comptabilisées sur ce chantier. Le chantier d'accueil apparaîtra dans l'export iBAT.</small>
         </div>
 
         <div id="entries-editor">
