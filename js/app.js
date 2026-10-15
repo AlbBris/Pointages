@@ -13,7 +13,8 @@
     { code: 'AT', label: 'Accident du travail' },
     { code: 'FORMATION', label: 'Formation' },
     { code: 'INTEMPERIE', label: 'Intempérie' },
-    { code: 'ABSENT', label: 'Absent' }
+    { code: 'ABSENT', label: 'Absent' },
+    { code: 'AUTRE_CHANTIER', label: 'Autre chantier' }
   ];
 
   const ui = {
@@ -483,7 +484,12 @@
     const absence = personAbsence(person.id, day);
     const late = personLate(person.id, day);
     if (absence && total > 0) return { key: 'conflict', label: 'Absence + heures', total, target, absence, late };
-    if (absence) return { key: 'absence', label: absence.code, total, target, absence, late: null };
+    if (absence) {
+      const label = absence.code === 'AUTRE_CHANTIER'
+        ? `Autre chantier : ${absence.siteName || 'non renseigné'}`
+        : absence.code;
+      return { key: 'absence', label, total, target, absence, late: null };
+    }
     if (total <= 0) return { key: 'empty', label: 'Non saisi', total, target, absence: null, late };
     if (late) {
       const difference = target > 0 ? target - total : 0;
@@ -839,7 +845,7 @@
         </div>
         <div class="person-status">
           <span class="status-pill ${status.key}">${escapeHtml(status.label)}</span>
-          <button type="button" class="card-action" data-edit-pointage="${escapeHtml(person.id)}"><span class="desktop-card-action">${isWeekLocked() ? 'Consulter' : 'Modifier'}</span><span class="mobile-card-action">${isWeekLocked() ? 'Voir' : status.key === 'empty' ? 'Pointer' : status.key === 'under' || status.key === 'conflict' ? 'Compléter' : `${numberText(status.total)} h ✓`}</span></button>
+          <button type="button" class="card-action" data-edit-pointage="${escapeHtml(person.id)}"><span class="desktop-card-action">${isWeekLocked() ? 'Consulter' : 'Modifier'}</span><span class="mobile-card-action">${isWeekLocked() ? 'Voir' : status.key === 'empty' ? 'Pointer' : status.key === 'under' || status.key === 'conflict' ? 'Compléter' : status.key === 'absence' ? (status.absence?.code === 'AUTRE_CHANTIER' ? 'Autre chantier ✓' : 'Absence ✓') : `${numberText(status.total)} h ✓`}</span></button>
         </div>
       </article>`;
   }
@@ -878,7 +884,9 @@
       const teamNames = teamForPerson(person.id).map(team => team.name).join(', ');
       const cells = DAY_NAMES.map((_, day) => {
         const status = getDayStatus(person, day);
-        const text = status.key === 'absence' ? status.label : (status.total ? numberText(status.total) : '—');
+        const text = status.key === 'absence'
+          ? (status.absence?.code === 'AUTRE_CHANTIER' ? `↗ ${status.absence.siteName || 'Autre chantier'}` : status.label)
+          : (status.total ? numberText(status.total) : '—');
         return `<td><button type="button" class="week-cell-button ${status.key}" data-week-person="${escapeHtml(person.id)}" data-week-day="${day}" title="${escapeHtml(status.label)}">${escapeHtml(text)}</button></td>`;
       }).join('');
       return `<tr><td><div class="person-cell"><strong>${escapeHtml(person.name)}</strong><small><span class="badge ${typeClass}">${escapeHtml(person.type)}</span> ${escapeHtml(person.company || '')}${person.travelZone ? ` · ${escapeHtml(person.travelZone)}` : ''}${teamNames ? ` · ${escapeHtml(teamNames)}` : ''}</small></div></td>${cells}<td><strong>${numberText(personWeekTotal(person.id))}</strong></td></tr>`;
@@ -894,7 +902,9 @@
     activePeople().forEach(person => {
       DAY_NAMES.forEach((dayName, day) => {
         const status = getDayStatus(person, day);
-        if (status.key === 'empty' && status.target > 0) {
+        if (status.key === 'absence' && status.absence?.code === 'AUTRE_CHANTIER' && !String(status.absence.siteName || '').trim()) {
+          alerts.push({ level: 'warning', blocking: true, person, day, title: `${person.name} · ${DAY_SHORT[day]}`, detail: 'Précisez le chantier d’accueil.' });
+        } else if (status.key === 'empty' && status.target > 0) {
           alerts.push({ level: 'warning', blocking: true, person, day, title: `${person.name} · ${DAY_SHORT[day]}`, detail: `Aucune heure ni absence renseignée (cible ${numberText(status.target)} h).` });
         } else if (status.key === 'under') {
           alerts.push({ level: 'warning', blocking: true, person, day, title: `${person.name} · ${DAY_SHORT[day]}`, detail: `${numberText(status.total)} h saisies sur ${numberText(status.target)} h théoriques.` });
@@ -1529,7 +1539,17 @@ Cordialement`;
     document.getElementById('pointage-dialog-meta').textContent = `${person.type} · ${person.company || 'Sans entreprise'}${person.travelZone ? ` · ${person.travelZone}` : ''}${isWeekLocked() ? ' · lecture seule' : ''}`;
     document.getElementById('day-status-options').innerHTML = ABSENCE_CODES.map(item => `
       <label class="status-option"><input type="radio" name="day-status" value="${item.code}" ${(absence?.code || 'PRESENT') === item.code ? 'checked' : ''} ${isWeekLocked() ? 'disabled' : ''}><span>${escapeHtml(item.label)}</span></label>`).join('');
-    document.getElementById('absence-note').value = absence?.note || '';
+    document.getElementById('absence-note').value = absence?.code === 'AUTRE_CHANTIER' ? '' : (absence?.note || '');
+    const siteSuggestions = store.projects
+      .filter(project => project.project.id !== db.project.id)
+      .map(project => project.project.name)
+      .filter(Boolean);
+    document.getElementById('other-site-suggestions').innerHTML = [...new Set(siteSuggestions)]
+      .map(name => `<option value="${escapeHtml(name)}"></option>`).join('');
+    document.getElementById('other-site-name').value = absence?.siteName || (absence?.code === 'AUTRE_CHANTIER' ? (absence?.note || '') : '');
+    document.getElementById('other-site-name').disabled = isWeekLocked();
+    document.getElementById('other-site-note').value = absence?.code === 'AUTRE_CHANTIER' && absence?.siteName ? (absence?.note || '') : '';
+    document.getElementById('other-site-note').disabled = isWeekLocked();
     document.getElementById('absence-note').disabled = isWeekLocked();
     document.getElementById('late-checkbox').checked = Boolean(late);
     document.getElementById('late-checkbox').disabled = isWeekLocked();
@@ -1611,7 +1631,10 @@ Cordialement`;
   function updatePointageStatusDisplay() {
     const isPresent = selectedStatusCode() === 'PRESENT';
     document.getElementById('entries-editor').hidden = !isPresent;
-    document.getElementById('absence-note-block').hidden = isPresent;
+    document.getElementById('absence-note-block').hidden = isPresent || selectedStatusCode() === 'AUTRE_CHANTIER';
+    const isOtherSite = selectedStatusCode() === 'AUTRE_CHANTIER';
+    document.getElementById('other-site-block').hidden = !isOtherSite;
+    document.getElementById('other-site-name').required = isOtherSite && !isWeekLocked();
     const lateChecked = isPresent && document.getElementById('late-checkbox').checked;
     document.getElementById('late-note-block').hidden = !lateChecked;
     const total = isPresent ? ui.entryDraft.reduce((sum, line) => sum + Number(line.hours || 0), 0) : 0;
@@ -1637,6 +1660,12 @@ Cordialement`;
     const status = selectedStatusCode();
     const lateChecked = status === 'PRESENT' && document.getElementById('late-checkbox').checked;
     const lateNote = document.getElementById('late-note').value.trim();
+    const siteName = status === 'AUTRE_CHANTIER' ? document.getElementById('other-site-name').value.trim() : '';
+    if (status === 'AUTRE_CHANTIER' && !siteName) {
+      showToast('Indiquez le chantier sur lequel le compagnon est affecté.', true);
+      document.getElementById('other-site-name').focus();
+      return;
+    }
     let mergedValues = [];
 
     if (status === 'PRESENT') {
@@ -1676,7 +1705,13 @@ Cordialement`;
       mergedValues.forEach(line => week.entries.push({ id: nextId('e'), personId, day, taskId: line.taskId, hours: line.hours, note: line.note || '' }));
       if (lateChecked && mergedValues.length) week.lates.push({ id: nextId('late'), personId, day, note: lateNote });
     } else {
-      week.absences.push({ id: nextId('a'), personId, day, code: status, note: document.getElementById('absence-note').value.trim() });
+      week.absences.push({
+        id: nextId('a'), personId, day, code: status,
+        note: status === 'AUTRE_CHANTIER'
+          ? document.getElementById('other-site-note').value.trim()
+          : document.getElementById('absence-note').value.trim(),
+        ...(status === 'AUTRE_CHANTIER' ? { siteName } : {})
+      });
     }
 
     saveDatabase();
@@ -1705,10 +1740,14 @@ Cordialement`;
     const previousLate = personLate(ui.editingPointage.personId, ui.editingPointage.day - 1);
     document.getElementById('late-checkbox').checked = false;
     document.getElementById('late-note').value = '';
+    document.getElementById('other-site-name').value = '';
+    document.getElementById('other-site-note').value = '';
     if (previousAbsence) {
       const radio = document.querySelector(`input[name="day-status"][value="${previousAbsence.code}"]`);
       if (radio) radio.checked = true;
-      document.getElementById('absence-note').value = previousAbsence.note || '';
+      document.getElementById('absence-note').value = previousAbsence.code === 'AUTRE_CHANTIER' ? '' : (previousAbsence.note || '');
+      document.getElementById('other-site-name').value = previousAbsence.siteName || (previousAbsence.code === 'AUTRE_CHANTIER' ? (previousAbsence.note || '') : '');
+      document.getElementById('other-site-note').value = previousAbsence.code === 'AUTRE_CHANTIER' && previousAbsence.siteName ? (previousAbsence.note || '') : '';
       ui.entryDraft = [];
     } else if (previous.length) {
       document.querySelector('input[name="day-status"][value="PRESENT"]').checked = true;
@@ -1974,7 +2013,7 @@ Cordialement`;
     });
     currentWeek().absences.forEach(item => {
       const person = getPerson(item.personId);
-      rows.push([db.project.name, db.project.code, db.currentWeek.week, dateIso(item.day), DAY_NAMES[item.day], person?.name || '', person?.type || '', person?.company || '', person?.travelZone || '', '', '', item.note || '', item.code]);
+      rows.push([db.project.name, db.project.code, db.currentWeek.week, dateIso(item.day), DAY_NAMES[item.day], person?.name || '', person?.type || '', person?.company || '', person?.travelZone || '', '', '', item.code === 'AUTRE_CHANTIER' ? [`Chantier : ${item.siteName || ''}`, item.note || ''].filter(Boolean).join(' · ') : (item.note || ''), item.code === 'AUTRE_CHANTIER' ? 'Autre chantier' : item.code]);
     });
     const csv = '\ufeff' + rows.map(row => row.map(value => `"${String(value ?? '').replaceAll('"', '""')}"`).join(';')).join('\r\n');
     downloadBlob(csv, `Pointages_${slug(db.project.name)}_S${db.currentWeek.week}_${db.currentWeek.year}.csv`, 'text/csv;charset=utf-8');
