@@ -1956,3 +1956,31 @@ button.tool-card:hover { transform: translateY(-1px); box-shadow: var(--shadow);
     width: 100%;
   }
 }
+
+/* V1.15.0 — Déplacement vers un autre chantier */
+.pointage-modal .other-site-block {
+  display: grid;
+  gap: 11px;
+  border: 1px solid #bed8ed;
+  background: #f3f9fe;
+}
+.pointage-modal .other-site-block > small {
+  display: block;
+  color: #416b86;
+  font-size: 11px;
+  line-height: 1.4;
+}
+#view-pointage .status-absence .status-pill {
+  max-width: 250px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 680px) {
+  .pointage-modal .other-site-block {
+    gap: 9px;
+    padding: 11px 12px;
+  }
+  .pointage-modal .status-options { gap: 6px; }
+  .pointage-modal .status-option span { padding-inline: 9px; }
+  .pointage-modal .other-site-block > small { font-size: 10px; }
+}
