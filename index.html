@@ -356,18 +356,19 @@
         <div class="severine-reminder" role="note">
           <span class="severine-reminder-icon" aria-hidden="true">↗</span>
           <div><strong>Envoi à Séverine · avant 12 h</strong>
-          <p>Chaque semaine, transmettez le classeur complet des pointages à Séverine avant midi.</p></div>
+          <p>Chaque semaine, transmettez l’export iBAT des pointages à Séverine avant midi.</p></div>
         </div>
 
         <div class="export-grid export-primary-grid">
           <article class="panel export-card featured export-severine-card">
-            <div class="export-icon">XLS</div>
+            <div class="export-icon">iB</div>
             <div>
-              <span class="eyebrow">Export hebdomadaire à transmettre</span>
+              <span class="eyebrow">Fichier hebdomadaire · 2 feuilles Excel</span>
               <h2>Export pour Séverine</h2>
-              <p>Le classeur Excel complet contient la ventilation, les récapitulatifs, le suivi des contrats et une feuille individuelle pour chaque intérimaire. Le nombre de feuilles dépend de l'effectif du chantier.</p>
+              <p>Le fichier iBAT contient une synthèse des heures par personne et par tâche, ainsi que le détail jour par jour. C’est ce document qu’il faut envoyer chaque semaine.</p>
             </div>
-            <button type="button" class="button primary" id="export-excel">Exporter pour Séverine</button>
+            <div class="split-actions"><button type="button" class="button primary" id="export-ibat">Exporter pour Séverine</button>
+              <button type="button" class="button secondary" id="share-ibat-secretary">Partager le fichier</button></div>
           </article>
         </div>
 
@@ -375,16 +376,13 @@
           <summary>Plus de types d’export <span class="export-fold-chevron" aria-hidden="true">⌄</span></summary>
           <div class="export-grid export-secondary-grid">
             <article class="panel export-card">
-              <div class="export-icon">iB</div>
+              <div class="export-icon">XLS</div>
               <div>
-                <span class="eyebrow">Export complémentaire · 2 feuilles</span>
-                <h2>Saisie iBAT simplifiée</h2>
-                <p>Une feuille des heures par compagnon et par tâche, et une feuille de détail par journée. Utile pour la ressaisie dans iBAT, mais distinct du classeur complet destiné à Séverine.</p>
+                <span class="eyebrow">Export complémentaire · plusieurs feuilles</span>
+                <h2>Classeur Excel complet</h2>
+                <p>Ventilation, synthèses, contrats et fiches individuelles des intérimaires. Ce fichier contient plusieurs feuilles selon le nombre de personnes.</p>
               </div>
-              <div class="split-actions">
-                <button type="button" class="button secondary" id="export-ibat">Exporter iBAT simplifié</button>
-                <button type="button" class="button ghost" id="share-ibat-secretary">Partager iBAT simplifié</button>
-              </div>
+              <button type="button" class="button secondary" id="export-excel">Exporter le classeur complet</button>
             </article>
 
             <article class="panel export-card">
