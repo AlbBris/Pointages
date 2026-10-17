@@ -1984,3 +1984,85 @@ button.tool-card:hover { transform: translateY(-1px); box-shadow: var(--shadow);
   .pointage-modal .status-option span { padding-inline: 9px; }
   .pointage-modal .other-site-block > small { font-size: 10px; }
 }
+
+/* V1.15.1 — Export Séverine au premier plan */
+#view-exports .export-primary-grid { grid-template-columns: minmax(0, 1fr); margin-bottom: 16px; }
+#view-exports .export-severine-card { max-width: 100%; }
+#view-exports .export-severine-card h2 { font-size: clamp(20px, 2.5vw, 25px); }
+#view-exports .export-severine-card p { max-width: 730px; }
+#view-exports .export-severine-card .split-actions { grid-column: 2; gap: 10px; }
+#view-exports .export-severine-card .split-actions .button.primary { min-height: 44px; }
+
+#view-exports .severine-reminder {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 15px 17px;
+  margin-bottom: 14px;
+  border: 1px solid #e6d26d;
+  border-radius: 13px;
+  background: #fffbea;
+}
+#view-exports .severine-reminder-icon {
+  display: grid;
+  place-items: center;
+  width: 35px;
+  height: 35px;
+  flex: none;
+  border-radius: 10px;
+  background: var(--gcc-yellow);
+  font-size: 20px;
+  font-weight: 900;
+}
+#view-exports .severine-reminder strong { display: block; font-size: 14px; }
+#view-exports .severine-reminder p {
+  margin: 4px 0 0;
+  color: #595343;
+  font-size: 13px;
+  line-height: 1.45;
+}
+#view-exports .export-fold {
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: #fff;
+  overflow: hidden;
+}
+#view-exports .export-fold > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 850;
+  list-style: none;
+  user-select: none;
+}
+#view-exports .export-fold > summary::-webkit-details-marker { display: none; }
+#view-exports .export-fold > summary:focus-visible { outline: 3px solid var(--gcc-yellow); outline-offset: -3px; }
+#view-exports .export-fold > summary:hover { background: #faf9f3; }
+#view-exports .export-fold-chevron { font-size: 20px; transition: transform .15s ease; }
+#view-exports .export-fold[open] .export-fold-chevron { transform: rotate(180deg); }
+#view-exports .export-secondary-grid { padding: 0 12px 14px; }
+#view-exports .export-fold > .settings-grid { margin: 0; padding: 0 12px 14px; }
+
+@media (max-width: 680px) {
+  #view-exports .view-heading h1 { font-size: 28px; }
+  #view-exports .severine-reminder { gap: 9px; padding: 12px; margin-bottom: 10px; }
+  #view-exports .severine-reminder strong { font-size: 13px; }
+  #view-exports .severine-reminder p { font-size: 11px; }
+  #view-exports .export-primary-grid { margin-bottom: 10px; }
+  #view-exports .export-card { grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 14px; }
+  #view-exports .export-card > .export-icon { width: 38px; height: 38px; font-size: 11px; }
+  #view-exports .export-card > .button,
+  #view-exports .export-card > .split-actions,
+  #view-exports .export-severine-card .split-actions { grid-column: 1; width: 100%; }
+  #view-exports .export-card .split-actions { display: grid; grid-template-columns: 1fr; }
+  #view-exports .export-card .split-actions .button { width: 100%; }
+  #view-exports .export-fold > summary { padding: 12px; }
+  #view-exports .export-secondary-grid { padding: 0 8px 10px; gap: 9px; }
+  #view-exports .export-fold > .settings-grid { padding: 0 8px 10px; }
+}
