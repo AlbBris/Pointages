@@ -2066,3 +2066,73 @@ button.tool-card:hover { transform: translateY(-1px); box-shadow: var(--shadow);
   #view-exports .export-secondary-grid { padding: 0 8px 10px; gap: 9px; }
   #view-exports .export-fold > .settings-grid { padding: 0 8px 10px; }
 }
+
+/* V1.16.0 — Statuts, heures incomplètes et fin de contrat */
+.pointage-modal .contract-end-choice {
+  margin-top: 12px;
+  padding: 11px 12px;
+  border: 1px solid #b9cbd7;
+  border-radius: 12px;
+  background: #f4f9fc;
+}
+.pointage-modal .contract-end-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  cursor: pointer;
+}
+.pointage-modal .contract-end-check input {
+  width: 19px;
+  height: 19px;
+  flex: 0 0 19px;
+  margin: 2px 0 0;
+  accent-color: #285d7a;
+}
+.pointage-modal .contract-end-check strong {
+  display: block;
+  font-size: 13px;
+}
+.pointage-modal .contract-end-check small {
+  display: block;
+  margin-top: 3px;
+  color: #536d7b;
+  font-size: 11px;
+  line-height: 1.4;
+}
+.pointage-modal .contract-end-choice:has(input:checked) {
+  border-color: #6097b6;
+  background: #e5f2fa;
+}
+.pointage-modal .incomplete-option-block {
+  margin: -6px 0 17px;
+  padding: 13px 14px;
+  border: 1px solid #d6dbec;
+  border-radius: 14px;
+  background: #f7f8fe;
+}
+.pointage-modal .incomplete-option-block .late-checkmark { background: #cbd7f3; }
+.pointage-modal #incomplete-note-block { margin-top: 9px; }
+.pointage-modal .incomplete-option-block input[type="checkbox"] { accent-color: #456ab3; }
+.pointage-modal .incomplete-option-block .late-toggle { cursor: pointer; }
+.pointage-modal .incomplete-option-block strong { font-size: 13px; }
+.pointage-modal .incomplete-option-block small { font-size: 11px; }
+.pointage-modal #entries-editor[hidden],
+.pointage-modal #other-site-block[hidden],
+.pointage-modal #absence-note-block[hidden],
+.pointage-modal #late-note-block[hidden],
+.pointage-modal #incomplete-note-block[hidden] { display: none !important; }
+.status-pill.incomplete { background: #e6edfd; color: #3155a4; }
+.status-pill.ended { background: #e5f2fa; color: #255d82; }
+.status-pill.out { background: #f1f1f1; color: #777; }
+.person-card.status-incomplete::before { background: #6f88c2; }
+.person-card.status-ended::before { background: #6c9db7; }
+.week-cell-button.ended { background: #e5f2fa; color: #255d82; }
+.week-cell-button.out { opacity: .45; cursor: default; }
+@media (max-width: 680px) {
+  .pointage-modal .status-fieldset { margin-bottom: 10px; }
+  .pointage-modal .contract-end-choice { padding: 10px 11px; margin-top: 9px; }
+  .pointage-modal .contract-end-check small { font-size: 10px; }
+  .pointage-modal .incomplete-option-block { padding: 10px 11px; margin-bottom: 12px; }
+  .pointage-modal .incomplete-option-block .late-copy small { font-size: 10px; }
+}
