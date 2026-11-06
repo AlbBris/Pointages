@@ -1741,6 +1741,10 @@ Cordialement`;
     const person = getPerson(personId);
     const previousStatus = personAbsence(personId, day)?.code || '';
     if (status === 'FIN_CONTRAT' && previousStatus !== 'FIN_CONTRAT') {
+      if (personDayTotal(personId, day) > 0) {
+        showToast('Des heures sont déjà saisies ce jour. Déclarez la fin de contrat le jour suivant pour les conserver.', true);
+        return;
+      }
       const endIso = dateIso(day);
       const laterEntries = Object.values(db.weeks || {}).some(week =>
         (week.entries || []).some(entry => {
@@ -1967,6 +1971,7 @@ Cordialement`;
       week.entries = (week.entries || []).filter(entry => entry.personId !== personId);
       week.absences = (week.absences || []).filter(item => item.personId !== personId);
       week.lates = (week.lates || []).filter(item => item.personId !== personId);
+      week.incompletes = (week.incompletes || []).filter(item => item.personId !== personId);
     });
     db.people = db.people.filter(item => item.id !== personId);
     db.interimContracts = (db.interimContracts || []).filter(contract => contract.personId !== personId);
@@ -2260,20 +2265,28 @@ Cordialement`;
     const sourceEntries = week.entries.filter(entry => entry.day === source);
     const sourceAbsences = week.absences.filter(item => item.day === source);
     const sourceLates = (week.lates || []).filter(item => item.day === source);
-    if (!sourceEntries.length && !sourceAbsences.length && !sourceLates.length) { showToast('Le jour source ne contient aucune saisie.', true); return; }
-    const targetHasData = week.entries.some(entry => entry.day === target) || week.absences.some(item => item.day === target) || (week.lates || []).some(item => item.day === target);
+    const sourceIncompletes = (week.incompletes || []).filter(item => item.day === source);
+    if (week.absences.some(item => item.day === target && item.code === 'FIN_CONTRAT')) {
+      showToast('Impossible d’écraser une fin de contrat par copie. Modifiez-la depuis le pointage concerné.', true);
+      return;
+    }
+    if (!sourceEntries.length && !sourceAbsences.length && !sourceLates.length && !sourceIncompletes.length) { showToast('Le jour source ne contient aucune saisie.', true); return; }
+    const targetHasData = week.entries.some(entry => entry.day === target) || week.absences.some(item => item.day === target) || (week.lates || []).some(item => item.day === target) || (week.incompletes || []).some(item => item.day === target);
     if (targetHasData && !overwrite) {
-      const occupied = new Set([...week.entries.filter(entry => entry.day === target).map(entry => entry.personId), ...week.absences.filter(item => item.day === target).map(item => item.personId), ...(week.lates || []).filter(item => item.day === target).map(item => item.personId)]);
+      const occupied = new Set([...week.entries.filter(entry => entry.day === target).map(entry => entry.personId), ...week.absences.filter(item => item.day === target).map(item => item.personId), ...(week.lates || []).filter(item => item.day === target).map(item => item.personId), ...(week.incompletes || []).filter(item => item.day === target).map(item => item.personId)]);
       sourceEntries.filter(entry => !occupied.has(entry.personId)).forEach(entry => week.entries.push({ ...entry, id: nextId('e'), day: target }));
-      sourceAbsences.filter(item => !occupied.has(item.personId)).forEach(item => week.absences.push({ ...item, id: nextId('a'), day: target }));
+      sourceAbsences.filter(item => item.code !== 'FIN_CONTRAT' && !occupied.has(item.personId)).forEach(item => week.absences.push({ ...item, id: nextId('a'), day: target }));
       sourceLates.filter(item => !occupied.has(item.personId)).forEach(item => week.lates.push({ ...item, id: nextId('late'), day: target }));
+      sourceIncompletes.filter(item => !occupied.has(item.personId)).forEach(item => week.incompletes.push({ ...item, id: nextId('inc'), day: target }));
     } else {
       week.entries = week.entries.filter(entry => entry.day !== target);
       week.absences = week.absences.filter(item => item.day !== target);
       week.lates = (week.lates || []).filter(item => item.day !== target);
+      week.incompletes = (week.incompletes || []).filter(item => item.day !== target);
       sourceEntries.forEach(entry => week.entries.push({ ...entry, id: nextId('e'), day: target }));
-      sourceAbsences.forEach(item => week.absences.push({ ...item, id: nextId('a'), day: target }));
+      sourceAbsences.filter(item => item.code !== 'FIN_CONTRAT').forEach(item => week.absences.push({ ...item, id: nextId('a'), day: target }));
       sourceLates.forEach(item => week.lates.push({ ...item, id: nextId('late'), day: target }));
+      sourceIncompletes.forEach(item => week.incompletes.push({ ...item, id: nextId('inc'), day: target }));
     }
     saveDatabase();
     document.getElementById('copy-day-dialog').close();
@@ -2289,10 +2302,15 @@ Cordialement`;
     if (!source || (!(source.entries || []).length && !(source.absences || []).length && !(source.lates || []).length)) { showToast('La semaine précédente ne contient aucun pointage.', true); return; }
     const target = currentWeek();
     const hasTarget = target.entries.length || target.absences.length || (target.lates || []).length;
-    if (!window.confirm(`${hasTarget ? 'Remplacer les saisies actuelles par' : 'Copier'} les pointages de la semaine ${previous.week} ?`)) return;
+    if ((target.absences || []).some(item => item.code === 'FIN_CONTRAT')) {
+      showToast('La semaine comporte une fin de contrat. Modifiez-la d’abord dans son jour de pointage avant de copier S-1.', true);
+      return;
+    }
+    if (!window.confirm(`${hasTarget ? 'Remplacer les saisies actuelles par' : 'Copier'} les pointages de la semaine ${previous.week} ? Les fins de contrat ne sont pas recopiées.`)) return;
     target.entries = (source.entries || []).filter(entry => getPerson(entry.personId) && getTask(entry.taskId)).map(entry => ({ ...entry, id: nextId('e') }));
-    target.absences = (source.absences || []).filter(item => getPerson(item.personId)).map(item => ({ ...item, id: nextId('a') }));
+    target.absences = (source.absences || []).filter(item => item.code !== 'FIN_CONTRAT' && getPerson(item.personId)).map(item => ({ ...item, id: nextId('a') }));
     target.lates = (source.lates || []).filter(item => getPerson(item.personId)).map(item => ({ ...item, id: nextId('late') }));
+    target.incompletes = (source.incompletes || []).filter(item => getPerson(item.personId)).map(item => ({ ...item, id: nextId('inc') }));
     target.rosterIds = [...new Set((source.rosterIds || []).filter(id => getPerson(id)))];
     saveDatabase();
     renderAll();
