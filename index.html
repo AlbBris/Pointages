@@ -89,7 +89,7 @@
         </button>
       </nav>
       <div class="sidebar-footer">
-        <span>V1.15.1</span>
+        <span>V1.16.0</span>
         <small>Mode local · prêt pour connexion</small>
       </div>
     </aside>
@@ -518,10 +518,16 @@
         <fieldset class="status-fieldset">
           <legend>Statut de la journée</legend>
           <div id="day-status-options" class="status-options"></div>
+          <div class="contract-end-choice">
+            <label class="contract-end-check" for="contract-end-checkbox">
+              <input type="checkbox" id="contract-end-checkbox">
+              <span><strong>Fin de contrat</strong><small>Déclarer la fin de contrat ce jour. Le compagnon ne sera plus proposé à partir du lendemain, mais ses heures précédentes restent enregistrées.</small></span>
+            </label>
+          </div>
         </fieldset>
 
         <div id="absence-note-block" class="absence-note-block" hidden>
-          <label>Observation d'absence
+          <label><span id="absence-note-label">Observation d'absence</span>
             <input id="absence-note" placeholder="Facultatif">
           </label>
         </div>
@@ -546,6 +552,18 @@
             <div id="late-note-block" class="late-note-block" hidden>
               <label>Motif / observation du retard
                 <input id="late-note" placeholder="Facultatif — ex. arrivée à 8h15">
+              </label>
+            </div>
+          </div>
+          <div class="incomplete-option-block">
+            <label class="late-toggle">
+              <input type="checkbox" id="incomplete-checkbox">
+              <span class="late-checkmark">✓</span>
+              <span class="late-copy"><strong>Heures incomplètes</strong><small>Signaler une journée travaillée avec moins d’heures que prévu, sans anomalie bloquante.</small></span>
+            </label>
+            <div id="incomplete-note-block" class="late-note-block" hidden>
+              <label>Motif / observation des heures incomplètes
+                <input id="incomplete-note" placeholder="Facultatif">
               </label>
             </div>
           </div>
