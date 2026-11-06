@@ -1735,7 +1735,27 @@ Cordialement`;
     const { personId, day } = ui.editingPointage;
     const status = selectedStatusCode();
     const lateChecked = status === 'PRESENT' && document.getElementById('late-checkbox').checked;
+    const incompleteChecked = status === 'PRESENT' && document.getElementById('incomplete-checkbox').checked;
     const lateNote = document.getElementById('late-note').value.trim();
+    const incompleteNote = document.getElementById('incomplete-note').value.trim();
+    const person = getPerson(personId);
+    const previousStatus = personAbsence(personId, day)?.code || '';
+    if (status === 'FIN_CONTRAT' && previousStatus !== 'FIN_CONTRAT') {
+      const endIso = dateIso(day);
+      const laterEntries = Object.values(db.weeks || {}).some(week =>
+        (week.entries || []).some(entry => {
+          if (entry.personId !== personId || Number(entry.hours || 0) <= 0) return false;
+          const date = isoWeekMonday(Number(week.year), Number(week.week));
+          date.setUTCDate(date.getUTCDate() + Number(entry.day));
+          return date.toISOString().slice(0, 10) > endIso;
+        })
+      );
+      if (laterEntries) {
+        showToast('Des heures existent après cette date. Vérifiez-les avant de déclarer la fin de contrat.', true);
+        return;
+      }
+      if (!window.confirm(`Confirmer la fin de contrat de ${person?.name || 'ce compagnon'} au ${formatDate(dateForDay(day))} ? Il ne figurera plus sur les jours suivants, et les heures déjà saisies seront conservées.`)) return;
+    }
     const siteName = status === 'AUTRE_CHANTIER' ? document.getElementById('other-site-name').value.trim() : '';
     if (status === 'AUTRE_CHANTIER' && !siteName) {
       showToast('Indiquez le chantier sur lequel le compagnon est affecté.', true);
@@ -1776,10 +1796,12 @@ Cordialement`;
     week.entries = week.entries.filter(entry => !(entry.personId === personId && entry.day === day));
     week.absences = week.absences.filter(item => !(item.personId === personId && item.day === day));
     week.lates = (week.lates || []).filter(item => !(item.personId === personId && item.day === day));
+    week.incompletes = (week.incompletes || []).filter(item => !(item.personId === personId && item.day === day));
 
     if (status === 'PRESENT') {
       mergedValues.forEach(line => week.entries.push({ id: nextId('e'), personId, day, taskId: line.taskId, hours: line.hours, note: line.note || '' }));
       if (lateChecked && mergedValues.length) week.lates.push({ id: nextId('late'), personId, day, note: lateNote });
+      if (incompleteChecked && mergedValues.length) week.incompletes.push({ id: nextId('inc'), personId, day, note: incompleteNote });
     } else {
       week.absences.push({
         id: nextId('a'), personId, day, code: status,
@@ -1790,6 +1812,12 @@ Cordialement`;
       });
     }
 
+    if (status === 'FIN_CONTRAT' && person) person.active = false;
+    if (previousStatus === 'FIN_CONTRAT' && status !== 'FIN_CONTRAT' && person) {
+      const latestEnd = contractEndDates(personId).at(-1);
+      const latestReactivate = [...(person.contractReactivations || [])].sort().at(-1);
+      if (!latestEnd || (latestReactivate && latestReactivate > latestEnd)) person.active = true;
+    }
     saveDatabase();
     const nextPerson = advanceAfterSave ? nextPendingPerson(personId, day) : null;
     document.getElementById('pointage-dialog').close();
@@ -1797,6 +1825,7 @@ Cordialement`;
     ui.entryDraft = [];
     renderPointage();
     renderWeek();
+    if (status === 'FIN_CONTRAT' || previousStatus === 'FIN_CONTRAT') renderPersonnel();
     if (nextPerson) {
       showToast('Enregistré · passage au suivant.');
       setTimeout(() => openPointageDialog(nextPerson.id, day), 80);
@@ -1814,6 +1843,14 @@ Cordialement`;
     const previous = personEntries(ui.editingPointage.personId, ui.editingPointage.day - 1);
     const previousAbsence = personAbsence(ui.editingPointage.personId, ui.editingPointage.day - 1);
     const previousLate = personLate(ui.editingPointage.personId, ui.editingPointage.day - 1);
+    const previousIncomplete = personIncomplete(ui.editingPointage.personId, ui.editingPointage.day - 1);
+    if (previousAbsence?.code === 'FIN_CONTRAT') {
+      showToast('La fin de contrat ne peut pas être recopiée : elle doit être déclarée au jour concerné.', true);
+      return;
+    }
+    document.getElementById('contract-end-checkbox').checked = false;
+    document.getElementById('incomplete-checkbox').checked = false;
+    document.getElementById('incomplete-note').value = '';
     document.getElementById('late-checkbox').checked = false;
     document.getElementById('late-note').value = '';
     document.getElementById('other-site-name').value = '';
@@ -1830,6 +1867,8 @@ Cordialement`;
       ui.entryDraft = previous.map(entry => ({ ...entry, id: nextId('entry'), draftId: nextId('draft'), day: ui.editingPointage.day }));
       document.getElementById('late-checkbox').checked = Boolean(previousLate);
       document.getElementById('late-note').value = previousLate?.note || '';
+      document.getElementById('incomplete-checkbox').checked = Boolean(previousIncomplete);
+      document.getElementById('incomplete-note').value = previousIncomplete?.note || '';
     } else {
       showToast('Le jour précédent est vide.', true);
       return;
@@ -2085,12 +2124,13 @@ Cordialement`;
       const person = getPerson(entry.personId);
       const task = getTask(entry.taskId);
       const late = personLate(entry.personId, entry.day);
-      const observation = [entry.note || '', late ? `Retard${late.note ? ` : ${late.note}` : ''}` : ''].filter(Boolean).join(' · ');
+      const incomplete = personIncomplete(entry.personId, entry.day);
+      const observation = [entry.note || '', late ? `Retard${late.note ? ` : ${late.note}` : ''}` : '', incomplete ? `Heures incomplètes${incomplete.note ? ` : ${incomplete.note}` : ''}` : ''].filter(Boolean).join(' · ');
       rows.push([db.project.name, db.project.code, db.currentWeek.week, dateIso(entry.day), DAY_NAMES[entry.day], person?.name || '', person?.type || '', person?.company || '', person?.travelZone || '', task?.name || '', Number(entry.hours || 0), observation, late ? 'Retard' : 'Présent']);
     });
     currentWeek().absences.forEach(item => {
       const person = getPerson(item.personId);
-      rows.push([db.project.name, db.project.code, db.currentWeek.week, dateIso(item.day), DAY_NAMES[item.day], person?.name || '', person?.type || '', person?.company || '', person?.travelZone || '', '', '', item.code === 'AUTRE_CHANTIER' ? [`Chantier : ${item.siteName || ''}`, item.note || ''].filter(Boolean).join(' · ') : (item.note || ''), item.code === 'AUTRE_CHANTIER' ? 'Autre chantier' : item.code]);
+      rows.push([db.project.name, db.project.code, db.currentWeek.week, dateIso(item.day), DAY_NAMES[item.day], person?.name || '', person?.type || '', person?.company || '', person?.travelZone || '', '', '', item.code === 'AUTRE_CHANTIER' ? [`Chantier : ${item.siteName || ''}`, item.note || ''].filter(Boolean).join(' · ') : (item.note || ''), item.code === 'AUTRE_CHANTIER' ? 'Autre chantier' : (item.code === 'FIN_CONTRAT' ? 'Fin de contrat' : item.code)]);
     });
     const csv = '\ufeff' + rows.map(row => row.map(value => `"${String(value ?? '').replaceAll('"', '""')}"`).join(';')).join('\r\n');
     downloadBlob(csv, `Pointages_${slug(db.project.name)}_S${db.currentWeek.week}_${db.currentWeek.year}.csv`, 'text/csv;charset=utf-8');
@@ -2496,8 +2536,13 @@ Cordialement`;
     });
 
     document.getElementById('pointage-form').addEventListener('submit', savePointage);
-    document.getElementById('day-status-options').addEventListener('change', updatePointageStatusDisplay);
+    document.getElementById('day-status-options').addEventListener('change', () => {
+      document.getElementById('contract-end-checkbox').checked = false;
+      updatePointageStatusDisplay();
+    });
+    document.getElementById('contract-end-checkbox').addEventListener('change', updatePointageStatusDisplay);
     document.getElementById('late-checkbox').addEventListener('change', updatePointageStatusDisplay);
+    document.getElementById('incomplete-checkbox').addEventListener('change', updatePointageStatusDisplay);
     document.getElementById('add-entry-line').addEventListener('click', () => { syncDraftFromDom(); addDraftLine(); });
     document.getElementById('copy-previous-day').addEventListener('click', copyPreviousDay);
     document.getElementById('entry-lines').addEventListener('input', () => { syncDraftFromDom(); updatePointageDialogTotal(); });
