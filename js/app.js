@@ -8,14 +8,19 @@
   const MONTHS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
   const ABSENCE_CODES = [
     { code: 'PRESENT', label: 'Présent' },
-    { code: 'CP', label: 'Congés' },
-    { code: 'AM', label: 'Arrêt maladie' },
-    { code: 'AT', label: 'Accident du travail' },
+    { code: 'CP', label: 'Congé payé (CP)' },
+    { code: 'AI', label: 'Absence irrégulière (AI)' },
+    { code: 'RTT', label: 'RTT' },
+    { code: 'ANP', label: 'Absence non payée (ANP)' },
     { code: 'FORMATION', label: 'Formation' },
+    { code: 'ECOLE', label: 'École' },
     { code: 'INTEMPERIE', label: 'Intempérie' },
-    { code: 'ABSENT', label: 'Absent' },
     { code: 'AUTRE_CHANTIER', label: 'Autre chantier' }
   ];
+  const LEGACY_ABSENCE_CODES = {
+    AM: 'Arrêt maladie (ancien statut)', AT: 'Accident du travail (ancien statut)',
+    ABSENT: 'Absent (ancien statut)'
+  };
 
   const ui = {
     view: 'pointage',
@@ -104,7 +109,8 @@
     normalized.people = normalized.people.map(person => {
       const typeText = String(person?.type || 'GCC').toLocaleLowerCase('fr');
       const type = (typeText.startsWith('prêt') || typeText.startsWith('pret')) ? 'Prêt de MO' : (typeText.startsWith('int') ? 'Intérim' : 'GCC');
-      return { ...person, type, zone: '', travelZone: String(person?.travelZone || '') };
+      return { ...person, type, zone: '', travelZone: String(person?.travelZone || ''),
+        contractReactivations: Array.isArray(person?.contractReactivations) ? person.contractReactivations : [] };
     });
     normalized.tasks ||= [];
     normalized.teams ||= [];
@@ -140,7 +146,7 @@
     normalized.teams = normalized.teams.map(team => ({ id: team.id || nextId('team'), name: team.name || 'Équipe', memberIds: Array.isArray(team.memberIds) ? team.memberIds : [] }));
     normalized.weeks ||= {};
     Object.values(normalized.weeks).forEach(week => {
-      week.entries ||= []; week.absences ||= []; week.lates ||= []; week.notes ||= ''; week.locked = Boolean(week.locked);
+      week.entries ||= []; week.absences ||= []; week.lates ||= []; week.incompletes ||= []; week.notes ||= ''; week.locked = Boolean(week.locked);
       if (week.rosterIds && !Array.isArray(week.rosterIds)) week.rosterIds = [];
     });
     if (!normalized.currentWeek?.year || !normalized.currentWeek?.week) {
@@ -216,6 +222,7 @@
         entries: [],
         absences: [],
         lates: [],
+        incompletes: [],
         notes: '',
         rosterIds: db.people.filter(person => person.active !== false && isPersonEligibleForWeek(person, db.currentWeek.year, db.currentWeek.week)).map(person => person.id),
         locked: false,
@@ -226,11 +233,12 @@
     week.entries ||= [];
     week.absences ||= [];
     week.lates ||= [];
+    week.incompletes ||= [];
     week.notes ||= '';
     week.locked = Boolean(week.locked);
     week.lockedAt ||= '';
     if (!Array.isArray(week.rosterIds)) {
-      const linked = new Set([...week.entries.map(entry => entry.personId), ...week.absences.map(item => item.personId), ...week.lates.map(item => item.personId)]);
+      const linked = new Set([...week.entries.map(entry => entry.personId), ...week.absences.map(item => item.personId), ...week.lates.map(item => item.personId), ...week.incompletes.map(item => item.personId)]);
       db.people.filter(person => person.active !== false).forEach(person => linked.add(person.id));
       week.rosterIds = [...linked];
     }
@@ -426,8 +434,46 @@
   function activePeople() {
     const week = currentWeek();
     const roster = new Set(week.rosterIds || []);
-    const linkedPeople = new Set([...(week.entries || []).map(entry => entry.personId), ...(week.absences || []).map(item => item.personId), ...(week.lates || []).map(item => item.personId)]);
+    const linkedPeople = new Set([...(week.entries || []).map(entry => entry.personId), ...(week.absences || []).map(item => item.personId), ...(week.lates || []).map(item => item.personId), ...(week.incompletes || []).map(item => item.personId)]);
     return db.people.filter(person => roster.has(person.id) || linkedPeople.has(person.id));
+  }
+
+  function contractEndDates(personId) {
+    const dates = [];
+    Object.values(db.weeks || {}).forEach(week => {
+      (week.absences || []).filter(item => item.personId === personId && item.code === 'FIN_CONTRAT').forEach(item => {
+        if (!Number.isInteger(Number(item.day)) || Number(item.day) < 0 || Number(item.day) > 4) return;
+        const monday = isoWeekMonday(Number(week.year), Number(week.week));
+        monday.setUTCDate(monday.getUTCDate() + Number(item.day));
+        dates.push(monday.toISOString().slice(0, 10));
+      });
+    });
+    return dates.sort();
+  }
+
+  function isPersonVisibleOnDay(person, day) {
+    if (!person) return false;
+    const iso = dateIso(day);
+    const ends = contractEndDates(person.id).filter(value => value <= iso);
+    const latestEnd = ends.at(-1);
+    if (!latestEnd || iso === latestEnd) return true;
+    const activation = (person.contractReactivations || []).filter(value => value <= iso).sort().at(-1);
+    return Boolean(activation && activation > latestEnd);
+  }
+
+  function registerPersonReactivation(person) {
+    const lastEnd = contractEndDates(person.id).at(-1);
+    let date = dateIso(ui.day);
+    if (lastEnd && date <= lastEnd) {
+      const next = new Date(lastEnd + 'T12:00:00Z');
+      next.setUTCDate(next.getUTCDate() + 1);
+      date = next.toISOString().slice(0, 10);
+    }
+    person.contractReactivations ||= [];
+    if (!person.contractReactivations.includes(date)) person.contractReactivations.push(date);
+    person.active = true;
+    if (!isWeekLocked() && date <= dateIso(4) && !currentWeek().rosterIds.includes(person.id))
+      currentWeek().rosterIds.push(person.id);
   }
 
   function activeTasks() {
@@ -466,6 +512,10 @@
     return (currentWeek().lates || []).find(item => item.personId === personId && item.day === day) || null;
   }
 
+  function personIncomplete(personId, day) {
+    return (currentWeek().incompletes || []).find(item => item.personId === personId && item.day === day) || null;
+  }
+
   function personDayTotal(personId, day) {
     return personEntries(personId, day).reduce((sum, entry) => sum + Number(entry.hours || 0), 0);
   }
@@ -483,22 +533,26 @@
     const target = personTarget(person, day);
     const absence = personAbsence(person.id, day);
     const late = personLate(person.id, day);
-    if (absence && total > 0) return { key: 'conflict', label: 'Absence + heures', total, target, absence, late };
+    const incomplete = personIncomplete(person.id, day);
+    if (!isPersonVisibleOnDay(person, day))
+      return { key: 'out', label: 'Fin de contrat', total, target, absence, late, incomplete };
+    if (absence && total > 0) return { key: 'conflict', label: 'Statut + heures', total, target, absence, late, incomplete };
     if (absence) {
       const label = absence.code === 'AUTRE_CHANTIER'
         ? `Autre chantier : ${absence.siteName || 'non renseigné'}`
-        : absence.code;
-      return { key: 'absence', label, total, target, absence, late: null };
+        : absence.code === 'FIN_CONTRAT' ? 'Fin de contrat'
+        : ABSENCE_CODES.find(item => item.code === absence.code)?.label || LEGACY_ABSENCE_CODES[absence.code] || absence.code;
+      return { key: absence.code === 'FIN_CONTRAT' ? 'ended' : 'absence', label, total, target, absence, late: null, incomplete: null };
     }
-    if (total <= 0) return { key: 'empty', label: 'Non saisi', total, target, absence: null, late };
-    if (late) {
+    if (total <= 0) return { key: 'empty', label: 'Non saisi', total, target, absence: null, late, incomplete };
+    if (late || incomplete) {
       const difference = target > 0 ? target - total : 0;
-      const label = difference > 0.01 ? `Retard · -${numberText(difference)} h` : 'Retard signalé';
-      return { key: 'late', label, total, target, absence: null, late };
+      const kind = [late ? 'Retard' : '', incomplete ? 'Heures incomplètes' : ''].filter(Boolean).join(' + ');
+      return { key: incomplete ? 'incomplete' : 'late', label: difference > 0.01 ? `${kind} · -${numberText(difference)} h` : kind, total, target, absence: null, late, incomplete };
     }
-    if (target <= 0 || Math.abs(total - target) < 0.01) return { key: 'complete', label: 'Complet', total, target, absence: null, late: null };
-    if (total < target) return { key: 'under', label: `${numberText(target - total)} h manquante(s)`, total, target, absence: null, late: null };
-    return { key: 'over', label: `+ ${numberText(total - target)} h`, total, target, absence: null, late: null };
+    if (target <= 0 || Math.abs(total - target) < 0.01) return { key: 'complete', label: 'Complet', total, target, absence: null, late: null, incomplete: null };
+    if (total < target) return { key: 'under', label: `${numberText(target - total)} h manquante(s)`, total, target, absence: null, late: null, incomplete: null };
+    return { key: 'over', label: `+${numberText(total - target)} h`, total, target, absence: null, late: null, incomplete: null };
   }
 
   function weekTotals() {
