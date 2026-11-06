@@ -751,10 +751,10 @@
   }
 
   function renderDailyStats() {
-    const people = activePeople();
+    const people = activePeople().filter(person => isPersonVisibleOnDay(person, ui.day));
     const statuses = people.map(person => getDayStatus(person, ui.day));
     const present = statuses.filter(status => status.total > 0).length;
-    const complete = statuses.filter(status => ['complete', 'over', 'absence', 'late'].includes(status.key)).length;
+    const complete = statuses.filter(status => ['complete', 'over', 'absence', 'late', 'incomplete', 'ended'].includes(status.key)).length;
     const toCheck = statuses.filter(status => ['under', 'empty', 'conflict'].includes(status.key)).length;
     const total = dayTotal(ui.day);
     document.getElementById('daily-stats').innerHTML = [
@@ -799,6 +799,7 @@
     const selectedTeam = ui.teamFilter === 'all' ? null : (db.teams || []).find(team => team.id === ui.teamFilter);
     const teamMembers = selectedTeam ? new Set(selectedTeam.memberIds || []) : null;
     return activePeople().filter(person => {
+      if (!isPersonVisibleOnDay(person, ui.day)) return false;
       if (ui.typeFilter !== 'all' && person.type !== ui.typeFilter) return false;
       if (teamMembers && !teamMembers.has(person.id)) return false;
       if (search && ![person.name, person.company, person.travelZone, ...teamForPerson(person.id).map(team => team.name)].some(value => String(value || '').toLocaleLowerCase('fr').includes(search))) return false;
@@ -815,7 +816,7 @@
   function renderMobilePointageSummary() {
     const container = document.getElementById('mobile-pointage-summary');
     if (!container) return;
-    const people = activePeople();
+    const people = activePeople().filter(person => isPersonVisibleOnDay(person, ui.day));
     const statuses = people.map(person => getDayStatus(person, ui.day));
     const pending = statuses.filter(pointageIsPending).length;
     const done = Math.max(0, people.length - pending);
@@ -857,7 +858,7 @@
     const grid = document.getElementById('people-grid');
     if (!people.length) {
       const advancedFilterActive = Boolean(ui.peopleSearch.trim()) || ui.typeFilter !== 'all' || ui.teamFilter !== 'all';
-      if (ui.mobilePointageFilter === 'todo' && !advancedFilterActive && activePeople().length) {
+      if (ui.mobilePointageFilter === 'todo' && !advancedFilterActive && activePeople().some(person => isPersonVisibleOnDay(person, ui.day))) {
         grid.innerHTML = `<div class="empty-state panel mobile-all-done"><strong>Tout le monde est pointé ✓</strong>Aucune saisie à compléter pour ${escapeHtml(DAY_NAMES[ui.day].toLowerCase())}.<button type="button" class="button ghost small" data-show-all-pointages>Afficher tout le monde</button></div>`;
       } else {
         grid.innerHTML = db.people.length ? `<div class="empty-state panel"><strong>Aucun résultat</strong>Modifiez la recherche, l’équipe ou le filtre.</div>` : `<div class="empty-state panel"><strong>Aucune personne enregistrée</strong>Ajoutez d’abord les salariés GCC et les intérimaires depuis l’onglet Personnel.</div>`;
@@ -899,7 +900,7 @@
         </div>
         <div class="person-status">
           <span class="status-pill ${status.key}">${escapeHtml(status.label)}</span>
-          <button type="button" class="card-action" data-edit-pointage="${escapeHtml(person.id)}"><span class="desktop-card-action">${isWeekLocked() ? 'Consulter' : 'Modifier'}</span><span class="mobile-card-action">${isWeekLocked() ? 'Voir' : status.key === 'empty' ? 'Pointer' : status.key === 'under' || status.key === 'conflict' ? 'Compléter' : status.key === 'absence' ? (status.absence?.code === 'AUTRE_CHANTIER' ? 'Autre chantier ✓' : 'Absence ✓') : `${numberText(status.total)} h ✓`}</span></button>
+          <button type="button" class="card-action" data-edit-pointage="${escapeHtml(person.id)}"><span class="desktop-card-action">${isWeekLocked() ? 'Consulter' : 'Modifier'}</span><span class="mobile-card-action">${isWeekLocked() ? 'Voir' : status.key === 'empty' ? 'Pointer' : status.key === 'under' || status.key === 'conflict' ? 'Compléter' : status.key === 'ended' ? 'Fin contrat ✓' : status.key === 'absence' ? (status.absence?.code === 'AUTRE_CHANTIER' ? 'Autre chantier ✓' : 'Statut ✓') : `${numberText(status.total)} h ✓`}</span></button>
         </div>
       </article>`;
   }
@@ -938,7 +939,8 @@
       const teamNames = teamForPerson(person.id).map(team => team.name).join(', ');
       const cells = DAY_NAMES.map((_, day) => {
         const status = getDayStatus(person, day);
-        const text = status.key === 'absence'
+        const text = status.key === 'out' ? '—'
+          : (status.key === 'absence' || status.key === 'ended')
           ? (status.absence?.code === 'AUTRE_CHANTIER' ? `↗ ${status.absence.siteName || 'Autre chantier'}` : status.label)
           : (status.total ? numberText(status.total) : '—');
         return `<td><button type="button" class="week-cell-button ${status.key}" data-week-person="${escapeHtml(person.id)}" data-week-day="${day}" title="${escapeHtml(status.label)}">${escapeHtml(text)}</button></td>`;
@@ -955,6 +957,7 @@
     const alerts = [];
     activePeople().forEach(person => {
       DAY_NAMES.forEach((dayName, day) => {
+        if (!isPersonVisibleOnDay(person, day)) return;
         const status = getDayStatus(person, day);
         if (status.key === 'absence' && status.absence?.code === 'AUTRE_CHANTIER' && !String(status.absence.siteName || '').trim()) {
           alerts.push({ level: 'warning', blocking: true, person, day, title: `${person.name} · ${DAY_SHORT[day]}`, detail: 'Précisez le chantier d’accueil.' });
@@ -1053,7 +1056,8 @@
     let changed = 0;
     db.people.forEach(person => {
       if (ids.has(person.id) && person.active !== active) {
-        person.active = active;
+        if (active) registerPersonReactivation(person);
+        else person.active = false;
         changed += 1;
       }
     });
@@ -1588,11 +1592,18 @@ Cordialement`;
     ui.entryDraft = personEntries(personId, day).map(entry => ({ ...entry, draftId: nextId('draft') }));
     const absence = personAbsence(personId, day);
     const late = personLate(personId, day);
+    const incomplete = personIncomplete(personId, day);
     document.getElementById('pointage-dialog-day').textContent = `${DAY_NAMES[day]} ${formatDate(dateForDay(day))}`;
     document.getElementById('pointage-dialog-person').textContent = person.name;
     document.getElementById('pointage-dialog-meta').textContent = `${person.type} · ${person.company || 'Sans entreprise'}${person.travelZone ? ` · ${person.travelZone}` : ''}${isWeekLocked() ? ' · lecture seule' : ''}`;
-    document.getElementById('day-status-options').innerHTML = ABSENCE_CODES.map(item => `
-      <label class="status-option"><input type="radio" name="day-status" value="${item.code}" ${(absence?.code || 'PRESENT') === item.code ? 'checked' : ''} ${isWeekLocked() ? 'disabled' : ''}><span>${escapeHtml(item.label)}</span></label>`).join('');
+    const oldCode = absence?.code;
+    const allStatuses = [...ABSENCE_CODES];
+    if (oldCode && !['FIN_CONTRAT', ...ABSENCE_CODES.map(item => item.code)].includes(oldCode))
+      allStatuses.push({ code: oldCode, label: LEGACY_ABSENCE_CODES[oldCode] || oldCode });
+    document.getElementById('day-status-options').innerHTML = allStatuses.map(item => `
+      <label class="status-option"><input type="radio" name="day-status" value="${item.code}" ${(oldCode === 'FIN_CONTRAT' ? 'PRESENT' : (oldCode || 'PRESENT')) === item.code ? 'checked' : ''} ${isWeekLocked() ? 'disabled' : ''}><span>${escapeHtml(item.label)}</span></label>`).join('');
+    document.getElementById('contract-end-checkbox').checked = oldCode === 'FIN_CONTRAT';
+    document.getElementById('contract-end-checkbox').disabled = isWeekLocked();
     document.getElementById('absence-note').value = absence?.code === 'AUTRE_CHANTIER' ? '' : (absence?.note || '');
     const siteSuggestions = store.projects
       .filter(project => project.project.id !== db.project.id)
@@ -1609,6 +1620,10 @@ Cordialement`;
     document.getElementById('late-checkbox').disabled = isWeekLocked();
     document.getElementById('late-note').value = late?.note || '';
     document.getElementById('late-note').disabled = isWeekLocked();
+    document.getElementById('incomplete-checkbox').checked = Boolean(incomplete);
+    document.getElementById('incomplete-checkbox').disabled = isWeekLocked();
+    document.getElementById('incomplete-note').value = incomplete?.note || '';
+    document.getElementById('incomplete-note').disabled = isWeekLocked();
     if (!ui.entryDraft.length && !absence && !isWeekLocked()) addDraftLine(false);
     renderEntryLines();
     document.querySelectorAll('#entry-lines input, #entry-lines select, #entry-lines button, #add-entry-line, #copy-previous-day').forEach(element => element.disabled = isWeekLocked());
@@ -1618,6 +1633,7 @@ Cordialement`;
   }
 
   function selectedStatusCode() {
+    if (document.getElementById('contract-end-checkbox')?.checked) return 'FIN_CONTRAT';
     return document.querySelector('input[name="day-status"]:checked')?.value || 'PRESENT';
   }
 
@@ -1683,23 +1699,29 @@ Cordialement`;
   }
 
   function updatePointageStatusDisplay() {
-    const isPresent = selectedStatusCode() === 'PRESENT';
+    const status = selectedStatusCode();
+    const isPresent = status === 'PRESENT';
     document.getElementById('entries-editor').hidden = !isPresent;
-    document.getElementById('absence-note-block').hidden = isPresent || selectedStatusCode() === 'AUTRE_CHANTIER';
-    const isOtherSite = selectedStatusCode() === 'AUTRE_CHANTIER';
+    document.getElementById('absence-note-block').hidden = isPresent || status === 'AUTRE_CHANTIER';
+    document.getElementById('absence-note-label').textContent = status === 'FIN_CONTRAT' ? 'Observation de fin de contrat' : 'Observation d’absence';
+    const isOtherSite = status === 'AUTRE_CHANTIER';
     document.getElementById('other-site-block').hidden = !isOtherSite;
     document.getElementById('other-site-name').required = isOtherSite && !isWeekLocked();
     const lateChecked = isPresent && document.getElementById('late-checkbox').checked;
+    const incompleteChecked = isPresent && document.getElementById('incomplete-checkbox').checked;
     document.getElementById('late-note-block').hidden = !lateChecked;
+    document.getElementById('incomplete-note-block').hidden = !incompleteChecked;
     const total = isPresent ? ui.entryDraft.reduce((sum, line) => sum + Number(line.hours || 0), 0) : 0;
     document.getElementById('pointage-dialog-total').textContent = hours(total);
     if (ui.editingPointage) {
       const person = getPerson(ui.editingPointage.personId);
       const target = personTarget(person, ui.editingPointage.day);
       const difference = target - total;
-      document.getElementById('pointage-dialog-target').textContent = lateChecked && difference > 0.01
-        ? `Horaire théorique : ${hours(target)} · retard déclaré : ${hours(difference)}`
-        : `Horaire théorique : ${hours(target)}`;
+      const detail = isPresent && difference > 0.01
+        ? (lateChecked ? ` · retard signalé : ${hours(difference)}` : incompleteChecked ? ` · heures incomplètes : ${hours(difference)}` : '')
+        : '';
+      document.getElementById('pointage-dialog-target').textContent = status === 'FIN_CONTRAT'
+        ? 'Sortie du chantier à compter du lendemain' : `Horaire théorique : ${hours(target)}${detail}`;
     }
   }
 
@@ -1933,6 +1955,7 @@ Cordialement`;
     const schedule = [...document.querySelectorAll('.schedule-input')].map(input => Number(input.value || 0));
     const data = { id, name, type, company, zone: '', travelZone: document.getElementById('person-travel-zone').value.trim().toUpperCase(), active: document.getElementById('person-active').checked, schedule };
     const index = db.people.findIndex(person => person.id === id);
+    if (index >= 0 && data.active && db.people[index].active === false) registerPersonReactivation(db.people[index]);
     const shouldCreateContract = ui.pendingInterimOnboarding && index < 0 && data.type === 'Intérim';
     ui.pendingInterimOnboarding = false;
     if (index >= 0) db.people[index] = { ...db.people[index], ...data };
