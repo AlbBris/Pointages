@@ -943,7 +943,9 @@
           : (status.key === 'absence' || status.key === 'ended')
           ? (status.absence?.code === 'AUTRE_CHANTIER' ? `↗ ${status.absence.siteName || 'Autre chantier'}` : status.label)
           : (status.total ? numberText(status.total) : '—');
-        return `<td><button type="button" class="week-cell-button ${status.key}" data-week-person="${escapeHtml(person.id)}" data-week-day="${day}" title="${escapeHtml(status.label)}">${escapeHtml(text)}</button></td>`;
+        return status.key === 'out'
+          ? '<td class="week-out-cell" title="Hors effectif après fin de contrat">—</td>'
+          : `<td><button type="button" class="week-cell-button ${status.key}" data-week-person="${escapeHtml(person.id)}" data-week-day="${day}" title="${escapeHtml(status.label)}">${escapeHtml(text)}</button></td>`;
       }).join('');
       return `<tr><td><div class="person-cell"><strong>${escapeHtml(person.name)}</strong><small><span class="badge ${typeClass}">${escapeHtml(person.type)}</span> ${escapeHtml(person.company || '')}${person.travelZone ? ` · ${escapeHtml(person.travelZone)}` : ''}${teamNames ? ` · ${escapeHtml(teamNames)}` : ''}</small></div></td>${cells}<td><strong>${numberText(personWeekTotal(person.id))}</strong></td></tr>`;
     }).join('');
@@ -1774,6 +1776,10 @@ Cordialement`;
       if (contractCheck.warning) showToast(contractCheck.warning, true);
       syncDraftFromDom();
       const linesWithHours = ui.entryDraft.filter(line => Number(line.hours) > 0);
+      if ((lateChecked || incompleteChecked) && !linesWithHours.length) {
+        showToast('Renseignez les heures effectuées avant de cocher retard ou heures incomplètes.', true);
+        return;
+      }
       if (linesWithHours.some(line => !line.taskId)) {
         showToast('Choisissez une tâche pour chaque ligne comportant des heures.', true);
         return;
