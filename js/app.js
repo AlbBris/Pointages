@@ -1837,10 +1837,12 @@ Cordialement`;
     renderWeek();
     if (status === 'FIN_CONTRAT' || previousStatus === 'FIN_CONTRAT') renderPersonnel();
     if (nextPerson) {
-      showToast('Enregistré · passage au suivant.');
+      showToast(status === 'FIN_CONTRAT' ? 'Fin de contrat enregistrée · passage au suivant.' : 'Enregistré · passage au suivant.');
       setTimeout(() => openPointageDialog(nextPerson.id, day), 80);
     } else {
-      showToast(advanceAfterSave ? 'Pointage enregistré · journée à jour.' : 'Pointage enregistré.');
+      showToast(status === 'FIN_CONTRAT'
+        ? 'Fin de contrat enregistrée. Compagnon inactif dès le lendemain.'
+        : advanceAfterSave ? 'Pointage enregistré · journée à jour.' : 'Pointage enregistré.');
     }
   }
 
