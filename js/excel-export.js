@@ -179,6 +179,21 @@
     return (week.lates || []).find(item => item.personId === personId && Number(item.day) === Number(day)) || null;
   }
 
+  function personIncomplete(week, personId, day) {
+    return (week.incompletes || []).find(item => item.personId === personId && Number(item.day) === Number(day)) || null;
+  }
+
+  function isAfterContractEndInWeek(week, weekInfo, person, day) {
+    const ends = (week.absences || [])
+      .filter(item => item.personId === person.id && item.code === 'FIN_CONTRAT')
+      .map(item => Number(item.day)).sort((a, b) => b - a);
+    const lastEndDay = ends.find(value => value < day);
+    if (lastEndDay === undefined) return false;
+    const endIso = dateForDay(weekInfo.year, weekInfo.week, lastEndDay).toISOString().slice(0, 10);
+    const dayIso = dateForDay(weekInfo.year, weekInfo.week, day).toISOString().slice(0, 10);
+    return !(person.contractReactivations || []).some(date => date > endIso && date <= dayIso);
+  }
+
   function taskTotal(week, taskId, day = null) {
     return (week.entries || [])
       .filter(entry => entry.taskId === taskId && (day === null || Number(entry.day) === Number(day)))
@@ -202,7 +217,10 @@
     const lates = (week.lates || [])
       .filter(item => item.personId === personId && (day === null || Number(item.day) === Number(day)))
       .map(item => `Retard${String(item.note || '').trim() ? ` : ${String(item.note || '').trim()}` : ''}`);
-    return [...new Set([...notes, ...absences, ...lates])].join(' / ');
+    const incompletes = (week.incompletes || [])
+      .filter(item => item.personId === personId && (day === null || Number(item.day) === Number(day)))
+      .map(item => `Heures incomplètes${String(item.note || '').trim() ? ` : ${String(item.note || '').trim()}` : ''}`);
+    return [...new Set([...notes, ...absences, ...lates, ...incompletes])].join(' / ');
   }
 
   function taskSummary(week, tasksById, personId, day) {
@@ -712,10 +730,12 @@ ${formatDateFr(dateForDay(weekInfo.year, weekInfo.week, day)).slice(0, 5)}`), 'T
       DAY_NAMES.forEach((dayName, day) => {
         const absence = personAbsence(week, person.id, day);
         const late = personLate(week, person.id, day);
+        const incomplete = personIncomplete(week, person.id, day);
         if (absence) statusParts.push(absence.code === 'AUTRE_CHANTIER'
           ? `${dayName.slice(0, 3)} : Autre chantier (${absence.siteName || 'à préciser'})`
-          : `${dayName.slice(0, 3)} : ${absence.code}`);
+          : `${dayName.slice(0, 3)} : ${absence.code === 'FIN_CONTRAT' ? 'Fin de contrat' : absence.code}`);
         if (late) statusParts.push(`${dayName.slice(0, 3)} : RETARD${String(late.note || '').trim() ? ` (${String(late.note).trim()})` : ''}`);
+        if (incomplete) statusParts.push(`${dayName.slice(0, 3)} : HEURES INCOMPLÈTES${String(incomplete.note || '').trim() ? ` (${String(incomplete.note).trim()})` : ''}`);
       });
       fillRange(cells, row, row, 1, 12, subtotalStyle);
       cells.push(makeCell(row, 1, personCategory(person), subtotalStyle));
@@ -730,6 +750,11 @@ ${formatDateFr(dateForDay(weekInfo.year, weekInfo.week, day)).slice(0, 5)}`), 'T
         if (absence?.code === 'AUTRE_CHANTIER') {
           cells.push(makeCell(row, col, `↗ ${absence.siteName || 'Autre chantier'}`, STYLE.OTHER_SITE));
           rowHeights[row] = 36;
+        } else if (absence?.code === 'FIN_CONTRAT') {
+          cells.push(makeCell(row, col, 'Fin de contrat', STYLE.OTHER_SITE));
+          rowHeights[row] = 36;
+        } else if (isAfterContractEndInWeek(week, weekInfo, person, day)) {
+          cells.push(makeCell(row, col, '—', STYLE.MUTED_TEXT));
         } else {
           cells.push(makeFormulaCell(row, col, `SUM(${colLetter(col)}${personStartRow}:${colLetter(col)}${personEndRow})`, cached, subtotalStyle));
         }
@@ -775,9 +800,11 @@ ${formatDateFr(dateForDay(weekInfo.year, weekInfo.week, day)).slice(0, 5)}`), 'T
     let row = 2;
     sorted.forEach(person => {
       DAY_NAMES.forEach((dayName, day) => {
+        if (isAfterContractEndInWeek(week, weekInfo, person, day)) return;
         const dayEntries = personEntries(week, person.id, day);
         const absence = personAbsence(week, person.id, day);
         const late = personLate(week, person.id, day);
+        const incomplete = personIncomplete(week, person.id, day);
         const grouped = new Map();
         dayEntries.forEach(entry => {
           if (!grouped.has(entry.taskId)) grouped.set(entry.taskId, { hours: 0, notes: [] });
@@ -795,14 +822,16 @@ ${formatDateFr(dateForDay(weekInfo.year, weekInfo.week, day)).slice(0, 5)}`), 'T
           cells.push(makeCell(row, 6, person.travelZone || '', STYLE.TABLE_TEXT));
           cells.push(makeCell(row, 7, taskId ? (tasksById.get(taskId)?.name || 'Tâche supprimée') : '', STYLE.TABLE_TEXT));
           cells.push(makeCell(row, 8, item.hours || 0, STYLE.TABLE_NUMBER, 'number'));
-          const status = absence ? (absence.code === 'AUTRE_CHANTIER' ? 'Autre chantier' : absence.code) : (dayEntries.length ? 'Présent' : 'Non renseigné');
+          const status = absence ? (absence.code === 'AUTRE_CHANTIER' ? 'Autre chantier' : absence.code === 'FIN_CONTRAT' ? 'Fin de contrat' : absence.code)
+            : (incomplete ? 'Heures incomplètes' : (dayEntries.length ? 'Présent' : 'Non renseigné'));
           cells.push(makeCell(row, 9, status, absence ? STYLE.ABSENCE : (status === 'Non renseigné' ? STYLE.HOURS_ALERT : STYLE.TABLE_TEXT)));
           cells.push(makeCell(row, 10, late ? 'Oui' : '', late ? STYLE.HOURS_ALERT : STYLE.TABLE_TEXT));
           const notes = [...new Set([
             ...item.notes,
             absence?.code === 'AUTRE_CHANTIER' ? `Chantier d'accueil : ${absence.siteName || 'à préciser'}` : '',
             absence && String(absence.note || '').trim() ? String(absence.note).trim() : '',
-            late && String(late.note || '').trim() ? `Retard : ${String(late.note).trim()}` : ''
+            late && String(late.note || '').trim() ? `Retard : ${String(late.note).trim()}` : '',
+            incomplete ? `Heures incomplètes${String(incomplete.note || '').trim() ? ` : ${String(incomplete.note).trim()}` : ''}` : ''
           ].filter(Boolean))].join(' / ');
           cells.push(makeCell(row, 11, notes, STYLE.WRAP_TEXT));
           row += 1;
@@ -1175,7 +1204,7 @@ ${formatDateFr(dateForDay(weekInfo.year, weekInfo.week, day)).slice(0, 5)}`), 'T
       cells.push(makeCell(row, 3, person?.name || '', STYLE.TABLE_TEXT));
       cells.push(makeCell(row, 4, person?.type || '', STYLE.TABLE_TEXT));
       cells.push(makeCell(row, 5, person?.company || '', STYLE.TABLE_TEXT));
-      cells.push(makeCell(row, 6, item.code || '', STYLE.ABSENCE));
+      cells.push(makeCell(row, 6, item.code === 'FIN_CONTRAT' ? 'Fin de contrat' : (item.code || ''), STYLE.ABSENCE));
       cells.push(makeCell(row, 7, item.note || '', STYLE.WRAP_TEXT));
     });
     return {
@@ -1584,7 +1613,7 @@ ${formatDateFr(dateForDay(weekInfo.year, weekInfo.week, day)).slice(0, 5)}`), 'T
     return {
       project: context.project || {},
       weekInfo: context.weekInfo || {},
-      week: context.week || { entries: [], absences: [], lates: [], rosterIds: [] },
+      week: context.week || { entries: [], absences: [], lates: [], incompletes: [], rosterIds: [] },
       people: Array.isArray(context.people) ? context.people : [],
       allPeople: Array.isArray(context.allPeople) ? context.allPeople : (Array.isArray(context.people) ? context.people : []),
       tasks: Array.isArray(context.tasks) ? context.tasks : [],
