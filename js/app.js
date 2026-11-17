@@ -15,6 +15,7 @@
     { code: 'FORMATION', label: 'Formation' },
     { code: 'ECOLE', label: 'École' },
     { code: 'INTEMPERIE', label: 'Intempérie' },
+    { code: 'FERIE', label: 'Férié' },
     { code: 'AUTRE_CHANTIER', label: 'Autre chantier' }
   ];
   const LEGACY_ABSENCE_CODES = {
@@ -2143,7 +2144,7 @@ Cordialement`;
     });
     currentWeek().absences.forEach(item => {
       const person = getPerson(item.personId);
-      rows.push([db.project.name, db.project.code, db.currentWeek.week, dateIso(item.day), DAY_NAMES[item.day], person?.name || '', person?.type || '', person?.company || '', person?.travelZone || '', '', '', item.code === 'AUTRE_CHANTIER' ? [`Chantier : ${item.siteName || ''}`, item.note || ''].filter(Boolean).join(' · ') : (item.note || ''), item.code === 'AUTRE_CHANTIER' ? 'Autre chantier' : (item.code === 'FIN_CONTRAT' ? 'Fin de contrat' : item.code)]);
+      rows.push([db.project.name, db.project.code, db.currentWeek.week, dateIso(item.day), DAY_NAMES[item.day], person?.name || '', person?.type || '', person?.company || '', person?.travelZone || '', '', '', item.code === 'AUTRE_CHANTIER' ? [`Chantier : ${item.siteName || ''}`, item.note || ''].filter(Boolean).join(' · ') : (item.note || ''), item.code === 'AUTRE_CHANTIER' ? 'Autre chantier' : (item.code === 'FIN_CONTRAT' ? 'Fin de contrat' : (item.code === 'FERIE' ? 'Férié' : item.code))]);
     });
     const csv = '\ufeff' + rows.map(row => row.map(value => `"${String(value ?? '').replaceAll('"', '""')}"`).join(';')).join('\r\n');
     downloadBlob(csv, `Pointages_${slug(db.project.name)}_S${db.currentWeek.week}_${db.currentWeek.year}.csv`, 'text/csv;charset=utf-8');
