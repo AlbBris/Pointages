@@ -99,6 +99,10 @@
     return date.toLocaleDateString('fr-FR', { timeZone: 'UTC' });
   }
 
+  function exportStatusLabel(code) {
+    return code === 'FERIE' ? 'Férié' : (code === 'FIN_CONTRAT' ? 'Fin de contrat' : code);
+  }
+
   function isInterim(person) {
     return String(person?.type || '').toLocaleLowerCase('fr').startsWith('int');
   }
@@ -733,7 +737,7 @@ ${formatDateFr(dateForDay(weekInfo.year, weekInfo.week, day)).slice(0, 5)}`), 'T
         const incomplete = personIncomplete(week, person.id, day);
         if (absence) statusParts.push(absence.code === 'AUTRE_CHANTIER'
           ? `${dayName.slice(0, 3)} : Autre chantier (${absence.siteName || 'à préciser'})`
-          : `${dayName.slice(0, 3)} : ${absence.code === 'FIN_CONTRAT' ? 'Fin de contrat' : absence.code}`);
+          : `${dayName.slice(0, 3)} : ${exportStatusLabel(absence.code)}`);
         if (late) statusParts.push(`${dayName.slice(0, 3)} : RETARD${String(late.note || '').trim() ? ` (${String(late.note).trim()})` : ''}`);
         if (incomplete) statusParts.push(`${dayName.slice(0, 3)} : HEURES INCOMPLÈTES${String(incomplete.note || '').trim() ? ` (${String(incomplete.note).trim()})` : ''}`);
       });
@@ -753,6 +757,8 @@ ${formatDateFr(dateForDay(weekInfo.year, weekInfo.week, day)).slice(0, 5)}`), 'T
         } else if (absence?.code === 'FIN_CONTRAT') {
           cells.push(makeCell(row, col, 'Fin de contrat', STYLE.OTHER_SITE));
           rowHeights[row] = 36;
+        } else if (absence?.code === 'FERIE') {
+          cells.push(makeCell(row, col, 'Férié', STYLE.ABSENCE));
         } else if (isAfterContractEndInWeek(week, weekInfo, person, day)) {
           cells.push(makeCell(row, col, '—', STYLE.MUTED_TEXT));
         } else {
@@ -822,7 +828,7 @@ ${formatDateFr(dateForDay(weekInfo.year, weekInfo.week, day)).slice(0, 5)}`), 'T
           cells.push(makeCell(row, 6, person.travelZone || '', STYLE.TABLE_TEXT));
           cells.push(makeCell(row, 7, taskId ? (tasksById.get(taskId)?.name || 'Tâche supprimée') : '', STYLE.TABLE_TEXT));
           cells.push(makeCell(row, 8, item.hours || 0, STYLE.TABLE_NUMBER, 'number'));
-          const status = absence ? (absence.code === 'AUTRE_CHANTIER' ? 'Autre chantier' : absence.code === 'FIN_CONTRAT' ? 'Fin de contrat' : absence.code)
+          const status = absence ? (absence.code === 'AUTRE_CHANTIER' ? 'Autre chantier' : exportStatusLabel(absence.code))
             : (incomplete ? 'Heures incomplètes' : (dayEntries.length ? 'Présent' : 'Non renseigné'));
           cells.push(makeCell(row, 9, status, absence ? STYLE.ABSENCE : (status === 'Non renseigné' ? STYLE.HOURS_ALERT : STYLE.TABLE_TEXT)));
           cells.push(makeCell(row, 10, late ? 'Oui' : '', late ? STYLE.HOURS_ALERT : STYLE.TABLE_TEXT));
@@ -1001,7 +1007,7 @@ ${formatDateFr(dateForDay(weekInfo.year, weekInfo.week, day)).slice(0, 5)}`), 'T
       DAY_NAMES.forEach((_, day) => {
         const absence = personAbsence(week, person.id, day);
         const total = personDayTotal(week, person.id, day);
-        cells.push(makeCell(row, 4 + day, absence ? absence.code : (total || ''), absence ? STYLE.ABSENCE : numStyle, absence ? 'string' : (total ? 'number' : 'string')));
+        cells.push(makeCell(row, 4 + day, absence ? exportStatusLabel(absence.code) : (total || ''), absence ? STYLE.ABSENCE : numStyle, absence ? 'string' : (total ? 'number' : 'string')));
       });
       cells.push(makeFormulaCell(row, 9, `SUM(D${row}:H${row})`, personWeekTotal(week, person.id), numStyle));
       cells.push(makeCell(row, 10, noteSummary(week, person.id), STYLE.WRAP_TEXT));
@@ -1063,7 +1069,7 @@ ${formatDateFr(dateForDay(weekInfo.year, weekInfo.week, day)).slice(0, 5)}`), 'T
       DAY_NAMES.forEach((_, day) => {
         const absence = personAbsence(week, person.id, day);
         const total = personDayTotal(week, person.id, day);
-        cells.push(makeCell(row, 4 + day, absence ? absence.code : (total || ''), absence ? STYLE.ABSENCE : STYLE.BODY_NUMBER_BLUE, absence ? 'string' : (total ? 'number' : 'string')));
+        cells.push(makeCell(row, 4 + day, absence ? exportStatusLabel(absence.code) : (total || ''), absence ? STYLE.ABSENCE : STYLE.BODY_NUMBER_BLUE, absence ? 'string' : (total ? 'number' : 'string')));
       });
       const actual = personWeekTotal(week, person.id);
       const expected = personExpectedTotal(person);
@@ -1136,7 +1142,7 @@ ${formatDateFr(dateForDay(weekInfo.year, weekInfo.week, day)).slice(0, 5)}`), 'T
       cells.push(makeCell(row, 2, dateForDay(weekInfo.year, weekInfo.week, day), STYLE.DATE, 'date'));
       cells.push(makeCell(row, 3, Number(person?.schedule?.[day] || 0), STYLE.TABLE_NUMBER, 'number'));
       cells.push(makeCell(row, 4, total || '', absence ? STYLE.ABSENCE : STYLE.TABLE_NUMBER, total ? 'number' : 'string'));
-      cells.push(makeCell(row, 5, absence ? absence.code : (late ? 'Retard' : (total ? 'Présent' : '')), absence ? STYLE.ABSENCE : (late ? STYLE.HOURS_ALERT : STYLE.TABLE_TEXT)));
+      cells.push(makeCell(row, 5, absence ? exportStatusLabel(absence.code) : (late ? 'Retard' : (total ? 'Présent' : '')), absence ? STYLE.ABSENCE : (late ? STYLE.HOURS_ALERT : STYLE.TABLE_TEXT)));
       cells.push(makeCell(row, 6, taskSummary(week, tasksById, person.id, day), STYLE.WRAP_TEXT));
       cells.push(makeCell(row, 8, noteSummary(week, person.id, day), STYLE.WRAP_TEXT));
     });
@@ -1204,7 +1210,7 @@ ${formatDateFr(dateForDay(weekInfo.year, weekInfo.week, day)).slice(0, 5)}`), 'T
       cells.push(makeCell(row, 3, person?.name || '', STYLE.TABLE_TEXT));
       cells.push(makeCell(row, 4, person?.type || '', STYLE.TABLE_TEXT));
       cells.push(makeCell(row, 5, person?.company || '', STYLE.TABLE_TEXT));
-      cells.push(makeCell(row, 6, item.code === 'FIN_CONTRAT' ? 'Fin de contrat' : (item.code || ''), STYLE.ABSENCE));
+      cells.push(makeCell(row, 6, exportStatusLabel(item.code || ''), STYLE.ABSENCE));
       cells.push(makeCell(row, 7, item.note || '', STYLE.WRAP_TEXT));
     });
     return {
